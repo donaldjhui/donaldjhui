@@ -1,174 +1,524 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Donald Hui | Field Service Technician</title>
-    <link rel="icon" href="./Files/Me.jpg" type="image/jpg"> <!-- Favicon -->
-    <style>
-        html {
-            scroll-behavior: smooth;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Donald Hui | Field Service Technician</title>
 
-        section {
-            scroll-margin-top: 20px;
-        }
-    
-        body {
-            font-family: 'Arial', sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: #eef2f3;
-            color: #333;
-            line-height: 1.6;
-        }
+  <!-- Favicon -->
+  <link rel="icon" href="./Files/Me.jpg" type="image/jpeg" />
 
-        header {
-            background: #35424a;
-            color: #ffffff;
-            padding: 30px 0;
-            text-align: center;
-        }
+  <!-- Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-        h1 {
-            margin: 0;
-            font-size: 3rem;
-        }
+  <style>
+    :root{
+      --bg: #0b1220;
+      --text: rgba(255,255,255,.92);
+      --muted: rgba(255,255,255,.72);
+      --muted2: rgba(255,255,255,.60);
+      --accent: #7c5cff;
+      --accent2: #2ee59d;
+      --shadow: 0 18px 60px rgba(0,0,0,.45);
+      --radius: 18px;
+      --max: 1080px;
+    }
 
-        p {
-            font-size: 1.2rem;
-            margin: 5px 0;
-        }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body{
+      margin: 0;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(1200px 600px at 20% -10%, rgba(124,92,255,.35), transparent 60%),
+        radial-gradient(900px 500px at 85% 10%, rgba(46,229,157,.20), transparent 55%),
+        radial-gradient(700px 450px at 45% 120%, rgba(124,92,255,.18), transparent 55%),
+        var(--bg);
+      line-height: 1.55;
+    }
 
-        nav {
-            margin: 20px 0;
-        }
+    /* Animated background glow */
+    .glow{
+      position: fixed;
+      inset: -40vmax;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 30% 30%, rgba(124,92,255,.18), transparent 45%),
+        radial-gradient(circle at 70% 25%, rgba(46,229,157,.14), transparent 45%),
+        radial-gradient(circle at 55% 75%, rgba(124,92,255,.12), transparent 50%);
+      filter: blur(35px);
+      opacity: .9;
+      animation: drift 16s ease-in-out infinite alternate;
+      z-index: -1;
+    }
+    @keyframes drift{
+      from { transform: translate3d(-1.5%, -1%, 0) scale(1); }
+      to   { transform: translate3d(1.5%,  1%, 0) scale(1.03); }
+    }
 
-        nav a {
-            color: #ffffff;
-            padding: 10px 20px;
-            text-decoration: none;
-            border-radius: 5px;
-            background: #e94e77;
-            margin: 0 10px;
-            transition: background 0.3s ease;
-        }
+    a{ color: inherit; text-decoration: none; }
+    a:focus-visible, button:focus-visible{
+      outline: 3px solid rgba(124,92,255,.65);
+      outline-offset: 3px;
+      border-radius: 10px;
+    }
 
-        nav a:hover {
-            background: #d43f6b;
-        }
+    .container{
+      width: min(var(--max), calc(100% - 40px));
+      margin: 0 auto;
+    }
 
-        section {
-            padding: 30px;
-            margin: 20px auto;
-            max-width: 800px;
-            background: #ffffff;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
+    /* Top bar */
+    .topbar{
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      background: linear-gradient(to bottom, rgba(11,18,32,.86), rgba(11,18,32,.56));
+      border-bottom: 1px solid rgba(255,255,255,.08);
+    }
+    .topbar-inner{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 0;
+      gap: 16px;
+    }
+    .brand{
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 220px;
+    }
+    .avatar{
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 1px solid rgba(255,255,255,.22);
+      box-shadow: 0 8px 24px rgba(0,0,0,.35);
+      background: rgba(255,255,255,.08);
+      display: block;
+    }
+    .brand-title{
+      display: flex;
+      flex-direction: column;
+      line-height: 1.1;
+    }
+    .brand-title strong{
+      font-size: 14px;
+      letter-spacing: .2px;
+    }
+    .brand-title span{
+      font-size: 12px;
+      color: var(--muted2);
+    }
 
-        h2 {
-            color: #35424a;
-            border-bottom: 2px solid #e94e77;
-            padding-bottom: 10px;
-            font-size: 2rem;
-        }
+    .nav{
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .nav a{
+      padding: 10px 12px;
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 999px;
+      background: rgba(255,255,255,.06);
+      transition: transform .18s ease, background .18s ease, border-color .18s ease;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .nav a:hover{
+      transform: translateY(-1px);
+      background: rgba(255,255,255,.10);
+      border-color: rgba(255,255,255,.18);
+      color: var(--text);
+    }
 
-        .project-container {
-            display: flex;
-            flex-direction: column;
-        }
+    /* Hero */
+    .hero{ padding: 70px 0 36px; }
+    .hero-grid{
+      display: grid;
+      grid-template-columns: 1.25fr .75fr;
+      gap: 22px;
+      align-items: stretch;
+    }
+    .panel{
+      border: 1px solid rgba(255,255,255,.12);
+      background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.05));
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .hero-main{
+      padding: 26px;
+      overflow: hidden;
+      position: relative;
+    }
+    .hero-main::before{
+      content:"";
+      position:absolute;
+      inset:-2px;
+      background: radial-gradient(500px 240px at 10% 20%, rgba(124,92,255,.25), transparent 55%),
+                  radial-gradient(480px 240px at 90% 10%, rgba(46,229,157,.16), transparent 60%);
+      filter: blur(18px);
+      opacity: .8;
+      z-index: 0;
+    }
+    .hero-main > *{ position: relative; z-index: 1; }
 
-        .project {
-            margin: 15px 0;
-            padding: 15px;
-            border: 1px solid #e0e0e0;
-            border-radius: 5px;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-            position: relative;
-        }
+    .kicker{
+      display: inline-flex;
+      gap: 10px;
+      align-items: center;
+      font-size: 12px;
+      color: var(--muted);
+      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      padding: 8px 12px;
+      border-radius: 999px;
+    }
+    .dot{
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--accent2);
+      box-shadow: 0 0 0 6px rgba(46,229,157,.12);
+    }
+    h1{
+      margin: 14px 0 10px;
+      font-size: clamp(32px, 5vw, 44px);
+      line-height: 1.08;
+      letter-spacing: -.6px;
+    }
+    .subtitle{
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+      max-width: 65ch;
+    }
+    .cta{
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 18px;
+    }
+    .btn{
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 11px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.07);
+      color: var(--text);
+      transition: transform .18s ease, background .18s ease, border-color .18s ease;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .btn:hover{
+      transform: translateY(-1px);
+      background: rgba(255,255,255,.10);
+      border-color: rgba(255,255,255,.20);
+    }
+    .btn.primary{
+      background: linear-gradient(135deg, rgba(124,92,255,.95), rgba(124,92,255,.65));
+      border-color: rgba(124,92,255,.6);
+      box-shadow: 0 18px 40px rgba(124,92,255,.22);
+    }
+    .btn.primary:hover{
+      background: linear-gradient(135deg, rgba(124,92,255,1), rgba(124,92,255,.72));
+    }
 
-        .project:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-        }
+    .hero-side{
+      padding: 18px;
+      display: grid;
+      gap: 12px;
+    }
+    .stat{
+      padding: 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(0,0,0,.10);
+    }
+    .stat b{
+      display: block;
+      font-size: 18px;
+      letter-spacing: -.2px;
+      margin-bottom: 4px;
+    }
+    .stat span{
+      color: var(--muted2);
+      font-size: 13px;
+    }
 
-        footer {
-            text-align: center;
-            padding: 20px;
-            background: #35424a;
-            color: #ffffff;
-        }
+    /* Sections */
+    section{
+      padding: 18px 0;
+      scroll-margin-top: 92px;
+    }
+    .section-card{ padding: 22px; }
+    .section-title{
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 12px;
+    }
+    h2{
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: -.2px;
+    }
+    .section-desc{
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
 
-        a {
-            color: #e94e77;
-            text-decoration: none;
-            transition: color 0.3s ease;
-        }
+    /* Cards / Grid */
+    .grid{
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 14px;
+      margin-top: 14px;
+    }
+    .card{
+      grid-column: span 6;
+      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      border-radius: 16px;
+      padding: 16px;
+      transition: transform .18s ease, background .18s ease, border-color .18s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .card::after{
+      content:"";
+      position:absolute;
+      inset:-1px;
+      background: radial-gradient(420px 220px at 20% 0%, rgba(124,92,255,.18), transparent 55%),
+                  radial-gradient(420px 220px at 80% 0%, rgba(46,229,157,.12), transparent 55%);
+      opacity: 0;
+      transition: opacity .22s ease;
+      pointer-events:none;
+    }
+    .card:hover{
+      transform: translateY(-3px);
+      border-color: rgba(255,255,255,.18);
+      background: rgba(255,255,255,.08);
+    }
+    .card:hover::after{ opacity: 1; }
 
-        a:hover {
-            color: #d43f6b;
-        }
+    .card > *{ position: relative; z-index: 1; }
+    .card h3{
+      margin: 0 0 8px;
+      font-size: 16px;
+      letter-spacing: -.2px;
+    }
+    .card p{
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .chiprow{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .chip{
+      font-size: 12px;
+      color: rgba(255,255,255,.78);
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.06);
+    }
+    .card a{
+      display: inline-flex;
+      gap: 10px;
+      align-items: center;
+      font-weight: 600;
+      font-size: 13px;
+      color: rgba(255,255,255,.90);
+    }
+    .arrow{ display:inline-block; transition: transform .18s ease; }
+    .card:hover .arrow{ transform: translateX(3px); }
 
-        @media (max-width: 600px) {
-            h1 {
-                font-size: 2.5rem;
-            }
+    /* Footer */
+    footer{
+      padding: 26px 0 34px;
+      color: var(--muted2);
+      text-align: center;
+      font-size: 13px;
+    }
 
-            nav a {
-                margin: 0 5px;
-                padding: 8px 15px;
-            }
+    /* Responsive */
+    @media (max-width: 900px){
+      .hero-grid{ grid-template-columns: 1fr; }
+      .brand{ min-width: auto; }
+      .card{ grid-column: span 12; }
+    }
 
-            section {
-                padding: 20px;
-            }
-        }
-    </style>
+    /* Reduced motion */
+    @media (prefers-reduced-motion: reduce){
+      html { scroll-behavior: auto; }
+      * { transition: none !important; animation: none !important; }
+    }
+  </style>
 </head>
+
 <body>
-    <header>
-        <img src="./Files/Me.jpg" alt="Your Logo" style="width: 100px; height: auto; border-radius: 50%;">
-        <h1>Donald Hui</h1>
-        <p>Field Service Technician</p>
-        <nav>
-            <a href="#about">About Me</a>
-            <a href="#projects">Projects</a>
-            <a href="#resume">Resume</a>
-            <a href="#contact">Contact</a>
-        </nav>
-    </header>
+  <div class="glow" aria-hidden="true"></div>
+
+  <div class="topbar">
+    <div class="container topbar-inner">
+      <a class="brand" href="#top">
+        <img class="avatar" src="./Files/Me.jpg" alt="Donald Hui">
+        <div class="brand-title">
+          <strong>Donald Hui</strong>
+          <span>Field Service Technician</span>
+        </div>
+      </a>
+
+      <nav class="nav" aria-label="Primary">
+        <a href="#about">About Me</a>
+        <a href="#projects">Projects</a>
+        <a href="#resume">Resume</a>
+        <a href="#contact">Contact</a>
+      </nav>
+    </div>
+  </div>
+
+  <main id="top">
+    <div class="container hero">
+      <div class="hero-grid">
+        <div class="panel hero-main">
+          <div class="kicker"><span class="dot"></span> Bay Area • IT Field Services • Software background</div>
+          <h1>Reliable IT support, engineered with a software mindset.</h1>
+          <p class="subtitle">
+            Computer Science B.S. with a strong blend of enterprise IT field services and software engineering experience across
+            healthcare and biotech environments. Proven track record supporting large-scale end users by deploying, securing,
+            and maintaining end-user technology.
+          </p>
+
+          <div class="cta">
+            <a class="btn primary" href="#projects">View Projects</a>
+            <a class="btn" href="./Files/Donald_Hui_Resume.pdf" target="_blank" rel="noopener">View Resume</a>
+            <a class="btn" href="https://github.com/donaldjhui" target="_blank" rel="noopener">GitHub</a>
+            <a class="btn" href="https://linkedin.com/in/donald-hui/" target="_blank" rel="noopener">LinkedIn</a>
+          </div>
+        </div>
+
+        <div class="panel hero-side">
+          <div class="stat">
+            <b>Focus</b>
+            <span>On-site support • Deployment • Patch & lifecycle management</span>
+          </div>
+          <div class="stat">
+            <b>Strengths</b>
+            <span>Customer experience • Ownership • Clear documentation</span>
+          </div>
+          <div class="stat">
+            <b>Technical</b>
+            <span>Windows/macOS • Troubleshooting • Automation mindset</span>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <section id="about">
-        <h2>About Me</h2>
-        <p>Computer Science B.S. with a strong blend of enterprise IT field services and software engineering experience across healthcare and biotech environments. Proven track record supporting large-scale end users (15,000+) by deploying and maintaining end-user hardware/software, executing hardware refreshes, patching and security updates, and keeping asset/lifecycle data accurate for compliance. Former backend/software engineering intern and contractor who has built and deployed APIs and automation using Python/Flask, Docker, AWS, Celery/RabbitMQ, and CI/CD tools—bringing a disciplined, engineering-driven approach to troubleshooting, documentation, and continuous process improvement.</p>
+      <div class="container panel section-card">
+        <div class="section-title">
+          <h2>About Me</h2>
+          <p class="section-desc">Summary</p>
+        </div>
+        <p class="section-desc" style="margin-top: 10px;">
+          Computer Science B.S. with a strong blend of enterprise IT field services and software engineering experience across
+          healthcare and biotech environments. Proven track record supporting large-scale end users (15,000+) by deploying and
+          maintaining end-user hardware/software, executing hardware refreshes, patching and security updates, and keeping
+          asset/lifecycle data accurate for compliance. Former backend/software engineering intern and contractor who has built
+          and deployed APIs and automation using Python/Flask, Docker, AWS, Celery/RabbitMQ, and CI/CD tools—bringing a
+          disciplined, engineering-driven approach to troubleshooting, documentation, and continuous process improvement.
+        </p>
+      </div>
     </section>
 
     <section id="projects">
-        <h2>Projects</h2>
-        <div class="project-container">
-            <div class="project">
-                <h3>Open Source Contributions</h3>
-                <p>Contributed to various open source projects, improving code quality and adding new features. Key technologies include React, Node.js, and Docker.</p>
-                <a href="https://github.com/donaldjhui" target="_blank">View GitHub</a>
-            </div>
+      <div class="container panel section-card">
+        <div class="section-title">
+          <h2>Projects</h2>
+          <p class="section-desc">Links</p>
         </div>
+
+        <div class="grid">
+          <article class="card">
+            <h3>Open Source Contributions</h3>
+            <p>Portfolio of projects and contributions.</p>
+            <div class="chiprow">
+              <span class="chip">Git</span>
+              <span class="chip">Python</span>
+              <span class="chip">JavaScript</span>
+            </div>
+            <a href="https://github.com/donaldjhui" target="_blank" rel="noopener">
+              View GitHub <span class="arrow">→</span>
+            </a>
+          </article>
+        </div>
+      </div>
     </section>
 
     <section id="resume">
-        <h2>Resume</h2>
-        <p>Please find attached my updated resume.</p>
-        <a href="./Files/Donald_Hui_Resume.pdf" target="_blank">View Resume</a>
+      <div class="container panel section-card">
+        <div class="section-title">
+          <h2>Resume</h2>
+          <p class="section-desc">PDF</p>
+        </div>
+
+        <p class="section-desc" style="margin-top: 10px;">Please find attached my updated resume.</p>
+
+        <div class="cta" style="margin-top: 14px;">
+          <a class="btn primary" href="./Files/Donald_Hui_Resume.pdf" target="_blank" rel="noopener">View Resume</a>
+        </div>
+      </div>
     </section>
 
     <section id="contact">
-        <h2>Contact</h2>
-        <p>If you’d like to connect, please reach out to me at <a href="mailto:donaldjhui@gmail.com">donaldjhui@gmail.com</a>.</p>
+      <div class="container panel section-card">
+        <div class="section-title">
+          <h2>Contact</h2>
+          <p class="section-desc">Let’s connect</p>
+        </div>
+
+        <p class="section-desc" style="margin-top: 10px;">
+          Email is best:
+          <a href="mailto:donaldjhui@gmail.com" style="text-decoration: underline;">donaldjhui@gmail.com</a>
+        </p>
+
+        <div class="cta" style="margin-top: 14px;">
+          <a class="btn primary" href="mailto:donaldjhui@gmail.com">Email Me</a>
+          <a class="btn" href="https://linkedin.com/in/donald-hui/" target="_blank" rel="noopener">LinkedIn</a>
+          <a class="btn" href="https://github.com/donaldjhui" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </div>
     </section>
 
     <footer>
-        <p>This site is built using HTML, CSS, and JavaScript.</p>
-        <p>&copy; 2026 Donald Hui. All Rights Reserved.</p>
+      <div class="container">
+        <p style="margin:0;">This site is built using HTML, CSS, and JavaScript.</p>
+        <p style="margin:6px 0 0;">&copy; <span id="year"></span> Donald Hui. All Rights Reserved.</p>
+      </div>
     </footer>
+  </main>
+
+  <script>
+    document.getElementById("year").textContent = new Date().getFullYear();
+  </script>
 </body>
 </html>
