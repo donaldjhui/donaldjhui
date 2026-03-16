@@ -62,7 +62,8 @@
 
       <!-- Toggles -->
       <div class="toggles" aria-label="Site toggles">
-        <button class="toggle" id="soundToggle" type="button" aria-pressed="false">SOUND: OFF</button>
+        <button class="toggle" id="sfxToggle" type="button" aria-pressed="false">SFX: OFF</button>
+        <button class="toggle" id="musicToggle" type="button" aria-pressed="false">MUSIC: OFF</button>
         <button class="toggle" id="fxToggle" type="button" aria-pressed="true">FX: HIGH</button>
         <button class="toggle primary" id="arcadeToggle" type="button" aria-pressed="false">ARCADE: OFF</button>
       </div>
@@ -99,7 +100,6 @@
             I focus on deployments, troubleshooting, patching, and smooth end-user experiences—backed by real software engineering chops.
           </p>
 
-          <!-- Clear recruiter path (professional default) -->
           <div class="objectives" aria-label="Primary objectives">
             <div class="obj"><span class="k">PRIMARY</span><span class="v">Open Resume</span></div>
             <div class="obj"><span class="k">SECONDARY</span><span class="v">Browse Projects</span></div>
@@ -194,6 +194,17 @@
       </div>
     </footer>
   </main>
+
+  <!-- Background music (two-track system) -->
+  <audio id="bgmAmbient" preload="auto" loop>
+    <source src="./assets/audio/bgm_ambient.mp3" type="audio/mpeg">
+    <source src="./assets/audio/bgm_ambient.ogg" type="audio/ogg">
+  </audio>
+
+  <audio id="bgmArcade" preload="auto" loop>
+    <source src="./assets/audio/bgm_arcade.mp3" type="audio/mpeg">
+    <source src="./assets/audio/bgm_arcade.ogg" type="audio/ogg">
+  </audio>
 
   <script defer src="./assets/js/main.js"></script>
 </body>
