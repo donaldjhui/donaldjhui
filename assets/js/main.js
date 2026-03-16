@@ -5,26 +5,32 @@ document.getElementById("year").textContent = new Date().getFullYear();
 const root = document.documentElement;
 const hero = document.querySelector(".hero-main");
 
-// Defaults: professional
+// Storage keys
 const LS_ARCADE = "arcadeMode";
-const LS_FX = "fxHigh";          // "1" = HIGH (default), "0" = LOW
-const LS_SOUND_LEVEL = "soundLevel"; // "0" OFF, "1" LOW, "2" HIGH
+const LS_FX = "fxHigh";          // "1" HIGH, "0" LOW
+const LS_SFX_LEVEL = "sfxLevel"; // 0 OFF, 1 LOW, 2 HIGH
+const LS_MUSIC_LEVEL = "musicLevel"; // 0 OFF, 1 LOW, 2 HIGH
 
-let arcadeMode = localStorage.getItem(LS_ARCADE) === "1";
+// State
+let arcadeMode = false; // default OFF (ignores saved state)
+localStorage.setItem(LS_ARCADE, "0");
 let fxHigh = localStorage.getItem(LS_FX);
-fxHigh = fxHigh === null ? true : fxHigh === "1";
+fxHigh = fxHigh === null ? false : fxHigh === "1"; // default LOW
 
-let soundLevel = localStorage.getItem(LS_SOUND_LEVEL);
-soundLevel = soundLevel === null ? 0 : Number(soundLevel); // 0/1/2
+// Defaults: SFX LOW (so it feels responsive), MUSIC OFF (professional)
+let sfxLevel = localStorage.getItem(LS_SFX_LEVEL);
+sfxLevel = sfxLevel === null ? 1 : Number(sfxLevel);
+
+let musicLevel = localStorage.getItem(LS_MUSIC_LEVEL);
+musicLevel = musicLevel === null ? 0 : Number(musicLevel);
 
 root.dataset.arcade = arcadeMode ? "1" : "0";
 root.dataset.fx = fxHigh ? "1" : "0";
 
-// Pointer-reactive aurora + hero tilt (reduced on mobile / FX low)
+// Pointer reactive tilt (disabled in FX low / reduced motion / small screens)
 function shouldTilt(){
   if(!fxHigh) return false;
   if (matchMedia?.("(prefers-reduced-motion: reduce)").matches) return false;
-  // reduce tilt on smaller screens
   if (window.innerWidth < 860) return false;
   return true;
 }
@@ -100,7 +106,7 @@ function updateXP(){
 window.addEventListener("scroll", updateXP, { passive:true });
 updateXP();
 
-// Reticle follow (disabled if FX low or mobile via CSS)
+// Reticle follow
 const reticle = document.querySelector(".reticle");
 window.addEventListener("pointermove", (e) => {
   if(!reticle || !fxHigh) return;
@@ -109,7 +115,7 @@ window.addEventListener("pointermove", (e) => {
 }, { passive:true });
 
 /* ----------------------------
-   Sound system (OFF/LOW/HIGH)
+   SFX (WebAudio) — separate from Music
 -----------------------------*/
 let audioCtx = null;
 function ensureAudio(){
@@ -117,14 +123,14 @@ function ensureAudio(){
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   return audioCtx;
 }
-function levelGain(){
-  // tuned to be subtle; HIGH is still not obnoxious
-  if(soundLevel === 1) return 0.018;
-  if(soundLevel === 2) return 0.04;
+function sfxGain(){
+  // louder than before so SFX stands out vs music
+  if(sfxLevel === 1) return 0.04; // LOW
+  if(sfxLevel === 2) return 0.08; // HIGH
   return 0;
 }
 function bleep(freq=660, dur=0.05, type="sine", gainMult=1){
-  const base = levelGain();
+  const base = sfxGain();
   if(base <= 0) return;
   const ctx = ensureAudio();
   const t0 = ctx.currentTime;
@@ -157,16 +163,16 @@ function toast(title, msg){
   setTimeout(() => el.remove(), 3400);
 }
 
-const LS_ACH = "achievements_v2";
+const LS_ACH = "achievements_v3";
 const achieved = new Set(JSON.parse(localStorage.getItem(LS_ACH) || "[]"));
 
 function shake(){
   if(!fxHigh) return;
   if (matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
-  document.documentElement.classList.remove("shake");
-  void document.documentElement.offsetWidth;
-  document.documentElement.classList.add("shake");
-  setTimeout(() => document.documentElement.classList.remove("shake"), 420);
+  document.body.classList.remove("shake");
+void document.body.offsetWidth;
+document.body.classList.add("shake");
+setTimeout(() => document.body.classList.remove("shake"), 420);
 }
 
 function unlock(key, title, msg){
@@ -180,26 +186,144 @@ function unlock(key, title, msg){
     bleep(196, 0.06, "sawtooth", 1.1);
     bleep(392, 0.07, "square", 1.0);
     bleep(784, 0.06, "square", 1.0);
-    spawn(Math.min(innerWidth - 70, innerWidth * 0.88), Math.min(innerHeight - 70, innerHeight * 0.86), 48, 1.25);
+    spawn(Math.min(innerWidth - 70, innerWidth * 0.88), Math.min(innerHeight - 70, innerHeight * 0.86), 42, 1.15);
   }else{
     bleep(880, 0.05, "square", 0.9);
     bleep(1320, 0.045, "square", 0.8);
-    spawn(Math.min(innerWidth - 70, innerWidth * 0.88), Math.min(innerHeight - 70, innerHeight * 0.86), 18, 0.9);
+    spawn(Math.min(innerWidth - 70, innerWidth * 0.88), Math.min(innerHeight - 70, innerHeight * 0.86), 16, 0.9);
   }
 }
+
+/* ----------------------------
+   Background music (Two-track + crossfade)
+   - Controlled by MUSIC: OFF/LOW/HIGH
+   - Ambient plays in normal mode
+   - Arcade track plays in Arcade mode
+-----------------------------*/
+const bgmAmbient = document.getElementById("bgmAmbient");
+const bgmArcade = document.getElementById("bgmArcade");
+let bgmUnlocked = false;
+
+function musicBaseVolume(){
+  if(musicLevel === 1) return 0.10; // LOW
+  if(musicLevel === 2) return 0.18; // HIGH
+  return 0.0; // OFF
+}
+function targetVolumes(){
+  const base = musicBaseVolume();
+  return arcadeMode ? { ambient: 0.0, arcade: base } : { ambient: base, arcade: 0.0 };
+}
+function setImmediateVolumes(){
+  const { ambient, arcade } = targetVolumes();
+  if(bgmAmbient) bgmAmbient.volume = ambient;
+  if(bgmArcade) bgmArcade.volume = arcade;
+}
+async function tryPlay(el){
+  if(!el) return false;
+  try{ await el.play(); return true; } catch { return false; }
+}
+function stopAllBgm(){
+  if(bgmAmbient) { try { bgmAmbient.pause(); } catch{} }
+  if(bgmArcade)  { try { bgmArcade.pause(); } catch{} }
+}
+function ensureBgmState(){
+  if(musicLevel === 0){
+    stopAllBgm();
+    setImmediateVolumes();
+    return;
+  }
+  Promise.all([tryPlay(bgmAmbient), tryPlay(bgmArcade)]).then((res) => {
+    if(res.some(Boolean)) bgmUnlocked = true;
+    setImmediateVolumes();
+  });
+}
+
+let fadeRAF = null;
+function crossfadeToTargets(durationMs = 900){
+  if(musicLevel === 0){
+    stopAllBgm();
+    setImmediateVolumes();
+    return;
+  }
+
+  ensureBgmState();
+
+  const start = performance.now();
+  const fromA = bgmAmbient ? bgmAmbient.volume : 0;
+  const fromB = bgmArcade ? bgmArcade.volume : 0;
+  const { ambient: toA, arcade: toB } = targetVolumes();
+
+  if(fadeRAF) cancelAnimationFrame(fadeRAF);
+
+  const tick = (t) => {
+    const p = Math.min(1, (t - start) / durationMs);
+    const e = p * p * (3 - 2 * p); // smoothstep
+
+    const a = fromA + (toA - fromA) * e;
+    const b = fromB + (toB - fromB) * e;
+
+    if(bgmAmbient) bgmAmbient.volume = a;
+    if(bgmArcade) bgmArcade.volume = b;
+
+    if(p < 1) fadeRAF = requestAnimationFrame(tick);
+  };
+  fadeRAF = requestAnimationFrame(tick);
+}
+
+function syncBgmWithMusic(){
+  if(musicLevel === 0){
+    stopAllBgm();
+    setImmediateVolumes();
+    return;
+  }
+  ensureBgmState();
+  crossfadeToTargets(350); // settle to new base
+}
+function syncBgmWithArcade(){
+  if(musicLevel === 0){
+    stopAllBgm();
+    setImmediateVolumes();
+    return;
+  }
+  crossfadeToTargets(900);
+}
+
+// try unlock after first gesture if music already enabled
+window.addEventListener("pointerdown", () => {
+  if(!bgmUnlocked && musicLevel > 0) ensureBgmState();
+}, { passive: true });
+
+// pause/resume on tab visibility
+document.addEventListener("visibilitychange", () => {
+  if(document.visibilityState === "hidden"){
+    stopAllBgm();
+  }else{
+    if(musicLevel > 0) ensureBgmState();
+  }
+});
+
+// init volumes (no autoplay)
+setImmediateVolumes();
 
 /* ----------------------------
    Toggles UI
 -----------------------------*/
 const arcadeBtn = document.getElementById("arcadeToggle");
 const fxBtn = document.getElementById("fxToggle");
-const soundBtn = document.getElementById("soundToggle");
+const sfxBtn = document.getElementById("sfxToggle");
+const musicBtn = document.getElementById("musicToggle");
 
-function soundLabel(){
-  if(soundLevel === 0) return "SOUND: OFF";
-  if(soundLevel === 1) return "SOUND: LOW";
-  return "SOUND: HIGH";
+function sfxLabel(){
+  if(sfxLevel === 0) return "SFX: OFF";
+  if(sfxLevel === 1) return "SFX: LOW";
+  return "SFX: HIGH";
 }
+function musicLabel(){
+  if(musicLevel === 0) return "MUSIC: OFF";
+  if(musicLevel === 1) return "MUSIC: LOW";
+  return "MUSIC: HIGH";
+}
+
 function syncToggleUI(){
   arcadeBtn?.setAttribute("aria-pressed", arcadeMode ? "true" : "false");
   if(arcadeBtn) arcadeBtn.textContent = `ARCADE: ${arcadeMode ? "ON" : "OFF"}`;
@@ -207,8 +331,11 @@ function syncToggleUI(){
   fxBtn?.setAttribute("aria-pressed", fxHigh ? "true" : "false");
   if(fxBtn) fxBtn.textContent = `FX: ${fxHigh ? "HIGH" : "LOW"}`;
 
-  soundBtn?.setAttribute("aria-pressed", soundLevel > 0 ? "true" : "false");
-  if(soundBtn) soundBtn.textContent = soundLabel();
+  sfxBtn?.setAttribute("aria-pressed", sfxLevel > 0 ? "true" : "false");
+  if(sfxBtn) sfxBtn.textContent = sfxLabel();
+
+  musicBtn?.setAttribute("aria-pressed", musicLevel > 0 ? "true" : "false");
+  if(musicBtn) musicBtn.textContent = musicLabel();
 }
 syncToggleUI();
 
@@ -219,6 +346,8 @@ arcadeBtn?.addEventListener("click", () => {
   syncToggleUI();
   unlock("arcade", "Arcade Mode", "Chaos enabled (optional).");
   bleep(520, 0.05, "sawtooth", 0.8);
+
+  syncBgmWithArcade();
 });
 
 fxBtn?.addEventListener("click", () => {
@@ -229,33 +358,46 @@ fxBtn?.addEventListener("click", () => {
   unlock("fx_toggle", "FX Settings", `Effects set to ${fxHigh ? "HIGH" : "LOW"}.`);
 });
 
-soundBtn?.addEventListener("click", () => {
-  // cycle OFF -> LOW -> HIGH -> OFF
-  soundLevel = (soundLevel + 1) % 3;
-  localStorage.setItem(LS_SOUND_LEVEL, String(soundLevel));
+sfxBtn?.addEventListener("click", () => {
+  sfxLevel = (sfxLevel + 1) % 3; // OFF -> LOW -> HIGH -> OFF
+  localStorage.setItem(LS_SFX_LEVEL, String(sfxLevel));
   syncToggleUI();
 
-  if(soundLevel > 0){
-    ensureAudio(); // user gesture
-    bleep(740, 0.05, "square", 0.9);
-    bleep(990, 0.05, "square", 0.85);
-    unlock("sound", "Sound System", `Audio set to ${soundLevel === 1 ? "LOW" : "HIGH"}.`);
+  if(sfxLevel > 0){
+    ensureAudio(); // user gesture unlocks WebAudio
+    bleep(740, 0.05, "square", 1.0);
+    bleep(990, 0.05, "square", 0.9);
+    unlock("sfx_on", "SFX Online", `SFX set to ${sfxLevel === 1 ? "LOW" : "HIGH"}.`);
   }else{
-    unlock("sound_off", "Silence", "Audio disabled.");
+    unlock("sfx_off", "Quiet UI", "SFX disabled.");
   }
 });
 
-// UI click sounds (no hover sounds on mobile)
+musicBtn?.addEventListener("click", () => {
+  musicLevel = (musicLevel + 1) % 3; // OFF -> LOW -> HIGH -> OFF
+  localStorage.setItem(LS_MUSIC_LEVEL, String(musicLevel));
+  syncToggleUI();
+
+  if(musicLevel > 0){
+    unlock("music_on", "Soundtrack", `Music set to ${musicLevel === 1 ? "LOW" : "HIGH"}.`);
+  }else{
+    unlock("music_off", "No Soundtrack", "Music disabled.");
+  }
+
+  syncBgmWithMusic();
+});
+
+// UI click sounds (SFX only)
 document.addEventListener("pointerdown", (e) => {
   const t = e.target;
   if(!(t instanceof Element)) return;
   if(t.closest("a, button, .btn")) bleep(520, 0.04, "square", 0.7);
 }, { passive:true });
 
-// Hover bleep only in Arcade + Sound HIGH + desktop
+// Hover bleep only in Arcade + SFX HIGH + desktop
 document.addEventListener("pointerover", (e) => {
   if(!arcadeMode) return;
-  if(soundLevel !== 2) return;
+  if(sfxLevel !== 2) return;
   if(window.innerWidth < 980) return;
   const t = e.target;
   if(!(t instanceof Element)) return;
@@ -268,15 +410,13 @@ document.addEventListener("pointerover", (e) => {
 const fx = document.getElementById("fx");
 const ctx2 = fx?.getContext("2d");
 
-function isHidden(){
-  return document.visibilityState === "hidden";
-}
+function isHidden(){ return document.visibilityState === "hidden"; }
 
 let rafId = null;
 let running = false;
 let lastT = 0;
 
-let particleCap = 600; // guardrail
+const particleCap = 600;
 const particles = [];
 
 function resizeFx(){
@@ -291,11 +431,23 @@ function resizeFx(){
 window.addEventListener("resize", resizeFx, { passive:true });
 resizeFx();
 
+function startFX(){
+  if(running) return;
+  running = true;
+  lastT = performance.now();
+  rafId = requestAnimationFrame(tick);
+}
+function stopFX(){
+  if(!running) return;
+  running = false;
+  if(rafId) cancelAnimationFrame(rafId);
+  rafId = null;
+}
+
 function spawn(x,y, n=18, power=1){
   if(!ctx2) return;
   if(!fxHigh) return;
 
-  // reduce counts on small screens automatically
   if(innerWidth < 980) n = Math.max(6, Math.floor(n * 0.6));
 
   for(let i=0;i<n;i++){
@@ -311,7 +463,6 @@ function spawn(x,y, n=18, power=1){
     });
   }
 
-  // cap
   if(particles.length > particleCap){
     particles.splice(0, particles.length - particleCap);
   }
@@ -319,36 +470,17 @@ function spawn(x,y, n=18, power=1){
   startFX();
 }
 
-function startFX(){
-  if(running) return;
-  running = true;
-  lastT = performance.now();
-  rafId = requestAnimationFrame(tick);
-}
-
-function stopFX(){
-  if(!running) return;
-  running = false;
-  if(rafId) cancelAnimationFrame(rafId);
-  rafId = null;
-}
-
 function tick(t){
   if(!ctx2){ stopFX(); return; }
-  if(isHidden()){
-    // pause rendering to save power
-    stopFX();
-    return;
-  }
+  if(isHidden()){ stopFX(); return; }
 
   const dt = Math.min(0.05, (t - lastT) / 1000);
   lastT = t;
 
   ctx2.clearRect(0,0,innerWidth,innerHeight);
 
-  // Spark rain ONLY when Arcade + FX high
+  // Spark rain only when Arcade + FX high
   if(arcadeMode && fxHigh){
-    // rate scales with desktop vs mobile
     const rate = innerWidth < 980 ? 1 : 3;
     for(let k=0; k<rate; k++){
       if(Math.random() < 0.75){
@@ -371,7 +503,6 @@ function tick(t){
     }
   }
 
-  // update/draw
   for(let i=particles.length-1;i>=0;i--){
     const p = particles[i];
     p.life -= (0.9 * dt);
@@ -390,7 +521,6 @@ function tick(t){
   }
   ctx2.globalAlpha = 1;
 
-  // If nothing to draw and Arcade rain is off, stop RAF
   if(particles.length === 0 && !(arcadeMode && fxHigh)){
     stopFX();
     return;
@@ -399,14 +529,12 @@ function tick(t){
   rafId = requestAnimationFrame(tick);
 }
 
-// resume after tab becomes visible
 document.addEventListener("visibilitychange", () => {
   if(document.visibilityState === "visible"){
     if(particles.length > 0 || (arcadeMode && fxHigh)) startFX();
   }
 });
 
-// Interaction particles + optional click shake in Arcade
 document.addEventListener("pointerdown", (e) => {
   spawn(e.clientX, e.clientY, arcadeMode ? 22 : 12, arcadeMode ? 1.05 : 0.85);
   if(arcadeMode && fxHigh) shake();
@@ -437,7 +565,6 @@ const LS_QUEST = "questsDone_v2";
 const done = new Set(JSON.parse(localStorage.getItem(LS_QUEST) || "[]"));
 
 function setQuestLabel(a, checked){
-  // change [ ] -> [x] for non-color indicator
   const txt = a.textContent.replace(/^\[\s?[x ]\s?\]\s*/i, "");
   a.textContent = `${checked ? "[x]" : "[ ]"} ${txt}`;
 }
@@ -494,3 +621,13 @@ sectionEls.forEach(s => secIO.observe(s));
 document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach(a => {
   a.addEventListener("click", () => unlock("resume_open", "Paper Trail", "Opened the resume."), { passive:true });
 });
+
+// Prevent tiny scroll jumps when clicking interactive elements (keeps keyboard focus normal)
+document.addEventListener("pointerdown", (e) => {
+  const el = e.target instanceof Element ? e.target.closest("a, button, .btn") : null;
+  if (!el) return;
+
+  // Only for pointer interactions (mouse/touch), not keyboard.
+  // Prevents the browser from "scrolling to focused element".
+  if (typeof el.focus === "function") el.focus({ preventScroll: true });
+}, { passive: true });
