@@ -689,5 +689,11 @@ footer{
   90%{ transform: translate(-1px, 0) rotate(-.05deg); }
   100%{ transform: translate(0,0) rotate(0); }
 }
-html.shake{ animation: screenShake .35s linear both; }
-:root[data-fx="0"] html.shake{ animation:none !important; }
+body.shake{ animation: screenShake .35s linear both; }
+:root[data-fx="0"] body.shake{ animation:none !important; }
+
+@media (max-width: 980px){
+  .toggles{ flex-wrap: wrap; justify-content: flex-end; }
+}
+
+html{ overflow-anchor: none; }
