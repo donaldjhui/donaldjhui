@@ -842,3 +842,80 @@ body.shake{ animation: screenShake .35s linear both; }
   font-size: 1.4rem;
   line-height: 1;
 }
+
+/* Mobile Optimization Refinements */
+@media (max-width: 768px) {
+  :root {
+    --radius: 16px; /* Slightly smaller corners for small screens */
+  }
+
+  /* Stack the Topbar items */
+  .topbar-inner {
+    flex-direction: column;
+    padding: 10px 0;
+    gap: 10px;
+  }
+
+  .nav {
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  /* Adjust Hero Typography */
+  h1.glitch {
+    font-size: 1.5rem;
+    line-height: 1.2;
+  }
+
+  /* Tile Padding */
+  .hero-main, .section-card {
+    padding: 16px;
+  }
+
+  /* Ensure the Bento Grid doesn't overflow */
+  .bento {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* Target Buttons: Make them easier to tap */
+  .target {
+    min-height: 100px;
+  }
+  
+  .target-label {
+    font-size: 1rem;
+  }
+
+  /* Resume Preview: Make it scrollable on mobile */
+  .resume-preview {
+    height: 400px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Points & Reset spacing */
+  .topbar .points {
+    order: 2;
+  }
+  
+  #pointsResetBtn {
+    font-size: 10px;
+    padding: 6px 10px;
+  }
+}
+
+/* Touch Device Specifics */
+@media (hover: none) {
+  /* Disable custom reticle as it lags behind touch points */
+  .reticle {
+    display: none !important;
+  }
+  
+  /* Remove hover transforms that can get "stuck" on tap */
+  .card:hover, .btn:hover {
+    transform: none;
+  }
+}
