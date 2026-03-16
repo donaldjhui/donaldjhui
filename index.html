@@ -1,6 +1,5 @@
 <!doctype html>
 <html lang="en">
-
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -10,9 +9,7 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap"
-    rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="./assets/css/styles.css" />
 </head>
@@ -29,9 +26,7 @@
   </div>
 
   <!-- XP bar -->
-  <div class="xp" aria-hidden="true">
-    <div class="xp-fill" id="xpFill"></div>
-  </div>
+  <div class="xp" aria-hidden="true"><div class="xp-fill" id="xpFill"></div></div>
 
   <!-- FX canvas for particles -->
   <canvas id="fx" class="fx" aria-hidden="true"></canvas>
@@ -74,11 +69,11 @@
         <button class="toggle primary" id="arcadeToggle" type="button" aria-pressed="false">ARCADE: OFF</button>
       </div>
 
+      <!-- Points + reset -->
       <div class="points" aria-label="Points">
         <span class="points-label">POINTS</span>
         <span class="points-value" id="pointsValue">0</span>
       </div>
-
       <button class="toggle" id="pointsResetBtn" type="button">RESET POINTS</button>
     </div>
   </header>
@@ -102,6 +97,8 @@
   <main id="top">
     <div class="container hero">
       <div class="bento">
+
+        <!-- SUMMARY (shoot to reveal) -->
         <section class="tile hero-main reveal locked" aria-label="Summary" data-subject="Summary">
           <button class="target main-target" type="button" aria-controls="summaryPanel" aria-expanded="false">
             <span class="target-label">SUMMARY</span>
@@ -115,36 +112,33 @@
               Fast, reliable support—crafted like a production system.
             </h1>
 
-            <p class="subtitle">
-              Computer Science B.S. with enterprise IT field services experience across healthcare and biotech.
-              I focus on deployments, troubleshooting, patching, and smooth end-user experiences—backed by real software
-              engineering chops.
-            </p>
-
             <div class="section-head" style="margin-top:14px;">
               <h2 style="margin:0;">Summary</h2>
               <p class="tagline">summary.read()</p>
             </div>
 
+            <p class="subtitle">
+              Computer Science B.S. with enterprise IT field services experience across healthcare and biotech.
+              I focus on deployments, troubleshooting, patching, and smooth end-user experiences—backed by real software engineering chops.
+            </p>
+
             <div class="objectives" aria-label="Primary objectives">
               <div class="obj"><span class="k">PRIMARY</span><span class="v">Open Resume</span></div>
-              <div class="obj"><span class="k">SECONDARY</span><span class="v">Browse Work Samples</span></div>
+              <div class="obj"><span class="k">SECONDARY</span><span class="v">Browse Projects</span></div>
               <div class="obj"><span class="k">TERTIARY</span><span class="v">Contact</span></div>
             </div>
 
             <div class="cta">
-              <a class="btn primary" href="./assets/docs/Donald_Hui_Resume.pdf" target="_blank" rel="noopener">View
-                Resume</a>
-              <a class="btn" href="#projects">Explore Work Samples</a>
+              <a class="btn primary" href="./assets/docs/Donald_Hui_Resume.pdf" target="_blank" rel="noopener">View Resume</a>
+              <a class="btn" href="#projects">Explore Projects</a>
               <a class="btn ghost" href="https://github.com/donaldjhui" target="_blank" rel="noopener">GitHub</a>
-              <a class="btn ghost" href="https://linkedin.com/in/donald-hui/" target="_blank"
-                rel="noopener">LinkedIn</a>
+              <a class="btn ghost" href="https://linkedin.com/in/donald-hui/" target="_blank" rel="noopener">LinkedIn</a>
             </div>
           </div>
         </section>
 
-        <!-- ABOUT -->
-        <section id="about" class="tile section-card reveal locked" style="grid-column: span 12;" data-subject="About">
+        <!-- PROFILE -->
+        <section id="about" class="tile section-card reveal locked" style="grid-column: span 12;" data-subject="Profile">
           <button class="target main-target" type="button" aria-controls="aboutPanel" aria-expanded="false">
             <span class="target-label">PROFILE</span>
             <span class="target-sub">Shoot to reveal</span>
@@ -152,28 +146,26 @@
 
           <div class="panel" id="aboutPanel" hidden>
             <div class="section-head">
-              <h2>About</h2>
+              <h2>Profile</h2>
               <p class="tagline">profile.read()</p>
             </div>
             <p class="p">
-              Enterprise IT Field Services + CS background. I like fast triage, clean deployments, and building tools
-              that reduce friction.
+              Enterprise IT Field Services + CS background. I like fast triage, clean deployments, and building tools that reduce friction.
             </p>
           </div>
         </section>
 
-        <!-- PROJECTS -->
-        <section id="projects" class="tile section-card reveal locked" style="grid-column: span 12;"
-          data-subject="Projects">
+        <!-- Projects -->
+        <section id="projects" class="tile section-card reveal locked" style="grid-column: span 12;" data-subject="Projects">
           <button class="target main-target" type="button" aria-controls="projectsPanel" aria-expanded="false">
-            <span class="target-label">PROJECTS</span>
+            <span class="target-label">Projects</span>
             <span class="target-sub">Shoot to reveal</span>
           </button>
 
           <div class="panel" id="projectsPanel" hidden>
             <div class="section-head">
-              <h2>Projects</h2>
-              <p class="tagline">quests.load()</p>
+              <h2>Work Samples</h2>
+              <p class="tagline">projects.load()</p>
             </div>
 
             <div class="grid">
@@ -193,9 +185,8 @@
           </div>
         </section>
 
-        <!-- RESUME -->
-        <section id="resume" class="tile section-card reveal locked" style="grid-column: span 12;"
-          data-subject="Resume">
+        <!-- RESUME (full width) -->
+        <section id="resume" class="tile section-card reveal locked" style="grid-column: span 12;" data-subject="Resume">
           <button class="target main-target" type="button" aria-controls="resumePanel" aria-expanded="false">
             <span class="target-label">RESUME</span>
             <span class="target-sub">Shoot to reveal</span>
@@ -207,37 +198,37 @@
               <p class="tagline">resume.open()</p>
             </div>
 
-            <p class="p" style="margin-top: 14px;">
+            <p class="p">
               If the preview doesn’t load:
-              <a href="./assets/docs/Donald_Hui_Resume.pdf" target="_blank" rel="noopener"
-                style="text-decoration: underline;">
+              <a href="./assets/docs/Donald_Hui_Resume.pdf" target="_blank" rel="noopener" style="text-decoration: underline;">
                 open/download the PDF
               </a>.
             </p>
 
-            <!-- Shoot-to-expand target (visible only after resume is revealed) -->
-            <button class="target subtarget" data-action="resumeExpand" type="button" aria-controls="resumePreviewWrap"
-              aria-expanded="false" data-action="resumeExpand">
+            <!-- Shoot-to-expand target -->
+            <button class="target subtarget" type="button"
+                    aria-controls="resumePreviewWrap" aria-expanded="false"
+                    data-action="resumeExpand">
               <span class="target-label">PREVIEW</span>
               <span class="target-sub">Shoot to expand</span>
             </button>
 
             <div class="resume-preview" id="resumePreviewWrap">
-              <object class="resume-object" data="./assets/docs/Donald_Hui_Resume.pdf" type="application/pdf"
-                aria-label="Resume preview">
+              <object class="resume-object"
+                      data="./assets/docs/Donald_Hui_Resume.pdf"
+                      type="application/pdf"
+                      aria-label="Resume preview">
                 <p class="p">
                   PDF preview not supported in this browser.
-                  <a href="./assets/docs/Donald_Hui_Resume.pdf" target="_blank" rel="noopener"
-                    style="text-decoration: underline;">Open the PDF</a>.
+                  <a href="./assets/docs/Donald_Hui_Resume.pdf" target="_blank" rel="noopener" style="text-decoration: underline;">Open the PDF</a>.
                 </p>
               </object>
             </div>
           </div>
         </section>
 
-        <!-- CONTACT -->
-        <section id="contact" class="tile section-card reveal locked" style="grid-column: span 12;"
-          data-subject="Contact">
+        <!-- CONTACT (under resume, full width) -->
+        <section id="contact" class="tile section-card reveal locked" style="grid-column: span 12;" data-subject="Contact">
           <button class="target main-target" type="button" aria-controls="contactPanel" aria-expanded="false">
             <span class="target-label">CONTACT</span>
             <span class="target-sub">Shoot to reveal</span>
@@ -246,7 +237,7 @@
           <div class="panel" id="contactPanel" hidden>
             <div class="section-head">
               <h2>Contact</h2>
-              <p class="tagline">connect.now()</p>
+              <p class="tagline">contact.send()</p>
             </div>
             <p class="p">
               Email:
@@ -254,11 +245,11 @@
             </p>
             <div class="cta" style="margin-top: 14px;">
               <a class="btn primary" href="mailto:donaldjhui@gmail.com">Email Me</a>
-              <a class="btn ghost" href="https://linkedin.com/in/donald-hui/" target="_blank"
-                rel="noopener">LinkedIn</a>
+              <a class="btn ghost" href="https://linkedin.com/in/donald-hui/" target="_blank" rel="noopener">LinkedIn</a>
             </div>
           </div>
         </section>
+
       </div>
     </div>
 
@@ -283,5 +274,4 @@
 
   <script defer src="./assets/js/main.js"></script>
 </body>
-
 </html>
