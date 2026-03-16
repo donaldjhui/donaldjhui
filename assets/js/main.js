@@ -491,10 +491,14 @@ function stopFX() {
 }
 
 function spawn(x, y, n = 18, power = 1) {
-  if (!ctx2) return;
-  if (!fxHigh) return;
+  if (!ctx2 || !fxHigh) return;
 
-  if (innerWidth < 980) n = Math.max(6, Math.floor(n * 0.6));
+  // Reduce particle count significantly for mobile performance
+  const isMobile = window.innerWidth < 768;
+  if (isMobile) {
+    n = Math.max(4, Math.floor(n * 0.4));
+    power *= 0.8;
+  }
 
   for (let i = 0; i < n; i++) {
     const a = Math.random() * Math.PI * 2;
