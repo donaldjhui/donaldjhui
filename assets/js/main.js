@@ -846,3 +846,34 @@ document.addEventListener("pointerdown", (e) => {
     });
   });
 })();
+
+const menuBtn = document.getElementById('menuBtn');
+const settingsMenu = document.getElementById('settingsMenu');
+const questDrawer = document.getElementById('questDrawer');
+const drawerOverlay = document.getElementById('drawerOverlay');
+
+// Toggle Settings
+menuBtn?.addEventListener('click', () => {
+  settingsMenu.classList.toggle('active');
+  bleep(800, 0.05, "square");
+});
+
+// Open Quest Log when clicking the Quest Meter Text (or add a dedicated button)
+document.getElementById('questText')?.addEventListener('click', () => {
+  questDrawer.classList.add('open');
+  drawerOverlay.classList.add('active');
+});
+
+// Close drawer when clicking overlay
+drawerOverlay?.addEventListener('click', () => {
+  questDrawer.classList.remove('open');
+  drawerOverlay.classList.remove('active');
+});
+
+// Optional: Close drawer when a quest link is clicked
+document.querySelectorAll('.minimap .q').forEach(link => {
+  link.addEventListener('click', () => {
+    questDrawer.classList.remove('open');
+    drawerOverlay.classList.remove('active');
+  });
+});
