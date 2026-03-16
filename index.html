@@ -1,174 +1,75 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Donald Hui | Field Service Technician</title>
-  <link rel="icon" href="./assets/img/Me.jpg" type="image/jpeg" />
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./assets/css/styles.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Donald Hui | Portfolio</title>
+    <link rel="stylesheet" href="./assets/css/styles.css">
 </head>
-
 <body>
-  <div id="boot" class="boot" aria-hidden="true">
-    <div class="boot-panel">
-      <div class="boot-title">SYSTEM BOOT</div>
-      <div class="boot-sub">Initializing UI • Calibrating neon</div>
-      <div class="boot-bar"><span class="boot-fill"></span></div>
-      <div class="boot-hint">Press anywhere to skip</div>
-    </div>
-  </div>
 
-  <div class="xp" aria-hidden="true"><div class="xp-fill" id="xpFill"></div></div>
-  <canvas id="fx" class="fx" aria-hidden="true"></canvas>
-  <div class="reticle" aria-hidden="true"></div>
-  <div id="toast" class="toast" aria-live="polite"></div>
-
-  <div class="aurora" aria-hidden="true"></div>
-  <div class="noise" aria-hidden="true"></div>
-  <div class="vignette" aria-hidden="true"></div>
-
-  <header class="topbar">
-    <div class="container topbar-inner">
-      <a class="brand" href="#top">
-        <img class="avatar" src="./assets/img/Me.jpg" alt="Donald Hui">
-        <div class="brand-title">
-          <strong>Donald Hui</strong>
-          <span class="desktop-only">Field Service Technician</span>
-        </div>
-      </a>
-
-      <nav class="nav desktop-only">
-        <a href="#top">Summary</a>
-        <a href="#about">Profile</a>
-        <a href="#projects">Projects</a>
-      </nav>
-
-      <div class="topbar-controls">
-        <div class="points-pill">
-          <span class="points-value" id="pointsValue">0</span>
-          <span class="points-label">PTS</span>
-        </div>
-        
-        <button class="menu-trigger" id="menuBtn">SETTINGS</button>
-
-        <div class="settings-dropdown" id="settingsMenu">
-          <div class="toggles">
-            <button class="toggle" id="sfxToggle">SFX: ON</button>
-            <button class="toggle" id="musicToggle">MUSIC: OFF</button>
-            <button class="toggle" id="fxToggle">FX: HIGH</button>
-            <button class="toggle primary" id="arcadeToggle">ARCADE: OFF</button>
-            <button class="toggle danger" id="pointsResetBtn">RESET PTS</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </header>
-
-  <div class="drawer-overlay" id="drawerOverlay"></div>
-
-  <aside class="minimap" id="questDrawer">
-    <div class="drawer-handle"></div>
-    <div class="minimap-title">QUEST LOG</div>
-    <div class="quest-meter">
-      <div class="quest-meter-fill" id="questFill"></div>
-    </div>
-    <div id="questText" class="quest-meter-text">0% CLEAR</div>
-
-    <nav class="quest-list">
-      <a class="q" href="#top">[ ] Summary</a>
-      <a class="q" href="#about">[ ] Profile</a>
-      <a class="q" href="#projects">[ ] Projects</a>
-      <a class="q" href="#resume">[ ] Resume</a>
-      <a class="q" href="#contact">[ ] Contact</a>
-    </nav>
-  </aside>
-
-  <main id="top">
-    <div class="container hero">
-      <div class="bento">
-        <section class="tile hero-main reveal locked" data-subject="Summary">
-          <button class="target main-target" aria-controls="summaryPanel">
-            <span class="target-label">SUMMARY</span>
-            <span class="target-sub">Shoot to reveal</span>
-          </button>
-          <div class="panel" id="summaryPanel" hidden>
-            <div class="kicker"><span class="pulse"></span> Bay Area • IT Field Services</div>
-            <h1 class="glitch" data-text="Fast, reliable support—crafted like a production system.">
-              Fast, reliable support—crafted like a production system.
-            </h1>
-            <p class="subtitle">Computer Science B.S. with enterprise IT field services experience. I focus on deployments, troubleshooting, and patching.</p>
-            <div class="cta">
-              <a class="btn primary" href="./assets/docs/Donald_Hui_Resume.pdf" target="_blank">View Resume</a>
-              <a class="btn" href="#projects">Projects</a>
+    <header class="topbar">
+        <div class="container topbar-inner">
+            <div class="brand">
+                <img src="./assets/img/Me.jpg" alt="Logo" class="avatar">
+                <div class="brand-text">
+                    <strong>DONALD HUI</strong>
+                    <span class="desktop-only">Field Service Technician</span>
+                </div>
             </div>
-          </div>
-        </section>
 
-        <section id="about" class="tile section-card reveal locked" style="grid-column: span 12;">
-          <button class="target main-target" aria-controls="aboutPanel">
-            <span class="target-label">PROFILE</span>
-            <span class="target-sub">Shoot to reveal</span>
-          </button>
-          <div class="panel" id="aboutPanel" hidden>
-            <div class="section-head"><h2>Profile</h2></div>
-            <p class="p">Enterprise IT Field Services + CS background. I like fast triage, clean deployments, and building tools.</p>
-          </div>
-        </section>
-
-        <section id="projects" class="tile section-card reveal locked" style="grid-column: span 12;">
-          <button class="target main-target" aria-controls="projectsPanel">
-            <span class="target-label">PROJECTS</span>
-            <span class="target-sub">Shoot to reveal</span>
-          </button>
-          <div class="panel" id="projectsPanel" hidden>
-            <div class="grid">
-              <article class="card">
-                <h3>GitHub Portfolio</h3>
-                <p>Curated repositories and contributions.</p>
-                <a class="link" href="https://github.com/donaldjhui" target="_blank">View GitHub →</a>
-              </article>
+            <div class="topbar-controls">
+                <div class="points-pill">
+                    <span id="pointsValue">0</span> <small>PTS</small>
+                </div>
+                <button id="menuBtn" class="menu-trigger">SETTINGS</button>
+                
+                <div id="settingsMenu" class="settings-dropdown">
+                    <button class="toggle-btn" id="sfxToggle">SFX: ON</button>
+                    <button class="toggle-btn" id="musicToggle">MUSIC: OFF</button>
+                    <button class="toggle-btn" id="fxToggle">FX: HIGH</button>
+                    <button class="toggle-btn reset" id="pointsResetBtn">RESET PTS</button>
+                </div>
             </div>
-          </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <section id="top" class="hero-section">
+            <h1 class="glitch">System Operational</h1>
+            <p>Computer Science B.S. | Enterprise IT Field Services</p>
         </section>
 
-        <section id="resume" class="tile section-card reveal locked" style="grid-column: span 12;">
-          <button class="target main-target" aria-controls="resumePanel">
-            <span class="target-label">RESUME</span>
-            <span class="target-sub">Shoot to reveal</span>
-          </button>
-          <div class="panel" id="resumePanel" hidden>
-            <p class="p">Preview might not load on mobile. <a href="./assets/docs/Donald_Hui_Resume.pdf" style="text-decoration:underline">Download PDF</a></p>
-            <div class="resume-preview">
-              <object data="./assets/docs/Donald_Hui_Resume.pdf" type="application/pdf" width="100%" height="100%"></object>
+        <div class="bento-grid">
+            <section class="tile" id="about">
+                <h2>Profile</h2>
+                <p>Bay Area IT Professional focusing on deployments and triage.</p>
+            </section>
+            <section class="tile" id="projects">
+                <h2>Projects</h2>
+                <p>Check my GitHub for latest builds.</p>
+            </section>
+        </div>
+    </main>
+
+    <div id="drawerOverlay" class="drawer-overlay"></div>
+    <aside id="questDrawer" class="quest-drawer">
+        <div class="drawer-handle"></div>
+        <div class="drawer-content">
+            <h3>QUEST LOG</h3>
+            <div class="progress-container">
+                <div id="questFill" class="progress-bar"></div>
             </div>
-          </div>
-        </section>
+            <p id="questText">0% COMPLETE (Tap to Open)</p>
+            <nav class="quest-links">
+                <a href="#top">Summary</a>
+                <a href="#about">Profile</a>
+                <a href="#projects">Projects</a>
+                <a href="#contact">Contact</a>
+            </nav>
+        </div>
+    </aside>
 
-        <section id="contact" class="tile section-card reveal locked" style="grid-column: span 12;">
-          <button class="target main-target" aria-controls="contactPanel">
-            <span class="target-label">CONTACT</span>
-            <span class="target-sub">Shoot to reveal</span>
-          </button>
-          <div class="panel" id="contactPanel" hidden>
-            <p class="p">Email: <a href="mailto:donaldjhui@gmail.com">donaldjhui@gmail.com</a></p>
-          </div>
-        </section>
-      </div>
-    </div>
-
-    <footer>
-      <div class="container">
-        <div>&copy; <span id="year"></span> Donald Hui.</div>
-      </div>
-    </footer>
-  </main>
-
-  <audio id="bgmAmbient" preload="auto" loop><source src="./assets/audio/bgm_ambient.mp3" type="audio/mpeg"></audio>
-  <audio id="bgmArcade" preload="auto" loop><source src="./assets/audio/bgm_arcade.mp3" type="audio/mpeg"></audio>
-
-  <script defer src="./assets/js/main.js"></script>
+    <script src="./assets/js/main.js"></script>
 </body>
 </html>
