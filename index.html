@@ -45,30 +45,39 @@
   <!-- Topbar -->
   <header class="topbar">
   <div class="container topbar-inner">
-    <a class="brand" href="#top">
-      <img class="avatar" src="./assets/img/Me.jpg" alt="Donald Hui">
-      <div class="brand-title">
-        <strong>Donald Hui</strong>
-        <span id="mobile-hide">Field Service Technician</span>
-      </div>
-    </a>
+    <a class="brand" href="#top" aria-label="Home">
+  <img class="avatar" src="./assets/img/Me.jpg" alt="Donald Hui">
+  <div class="brand-title">
+    <strong>Donald Hui</strong>
+    <span class="desktop-only">Field Service Technician</span>
+  </div>
+</a>
 
-    <div class="points-display">
-      <span class="points-value" id="pointsValue">0</span>
-      <span class="points-label">PTS</span>
+<nav class="nav desktop-only" aria-label="Primary">
+  <a href="#top">Summary</a>
+  <a href="#about">Profile</a>
+  <a href="#projects">Projects</a>
+</nav>
+
+<div class="topbar-controls">
+  <div class="points-pill">
+    <span class="points-value" id="pointsValue">0</span>
+    <span class="points-label">PTS</span>
+  </div>
+  
+  <button class="menu-trigger" id="menuBtn" type="button">SETTINGS</button>
+
+  <div class="settings-dropdown" id="settingsMenu">
+    <div class="toggles">
+      <button class="toggle" id="sfxToggle" type="button">SFX: OFF</button>
+      <button class="toggle" id="musicToggle" type="button">MUSIC: OFF</button>
+      <button class="toggle" id="fxToggle" type="button">FX: HIGH</button>
+      <button class="toggle primary" id="arcadeToggle" type="button">ARCADE: OFF</button>
+      <button class="toggle danger" id="pointsResetBtn" type="button">RESET PTS</button>
     </div>
+  </div>
+</div>
 
-    <div class="settings-dropdown" id="settingsMenu">
-      <div class="toggles">
-        <button class="toggle" id="sfxToggle">SFX</button>
-        <button class="toggle" id="musicToggle">BGM</button>
-        <button class="toggle" id="fxToggle">FX</button>
-        <button class="toggle primary" id="arcadeToggle">ARCADE</button>
-        <button class="toggle reset-btn" id="pointsResetBtn">RESET</button>
-      </div>
-    </div>
-
-    <button class="menu-trigger" id="menuBtn">SETTINGS</button>
   </div>
 </header>
 
