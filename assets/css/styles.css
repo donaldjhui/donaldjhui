@@ -9,10 +9,7 @@
   --cyan:#00e5ff;
   --mag:#ff2bd6;
   --acid:#b7ff00;
-  --vio:#7c5cff;
 
-  --stroke: rgba(255,255,255,.10);
-  --stroke2: rgba(255,255,255,.18);
   --shadow: 0 26px 90px rgba(0,0,0,.70);
   --radius: 20px;
   --max: 1120px;
@@ -24,8 +21,8 @@
 
   --targetH: 120px;
 
-  --openMs: 1200ms;
-  --closeMs: 1400ms;
+  /* OPEN speed */
+  --openMs: 3000ms;
   --panelEase: cubic-bezier(.22, 1, .36, 1);
 }
 
@@ -185,8 +182,6 @@ a:focus-visible, button:focus-visible, .btn:focus-visible{
   display:grid;
   grid-template-columns: repeat(12, minmax(0,1fr));
   gap: 14px;
-
-  /* allow hovered buttons/shadows to render outside grid bounds */
   overflow: visible;
 }
 
@@ -196,22 +191,20 @@ a:focus-visible, button:focus-visible, .btn:focus-visible{
   border: 1px solid rgba(255,255,255,.10);
   background: rgba(255,255,255,.04);
   box-shadow: var(--shadow);
-  overflow: visible; /* prevent clipping of hover/shadows */
+  overflow: visible;
 }
 
 /* Summary tile */
 .hero-main{
   grid-column: span 12;
   padding: 22px;
-  padding-bottom: 34px; /* extra breathing room so CTA never looks clipped */
+  padding-bottom: 34px;
   overflow: visible !important;
 
   transform: perspective(1200px) rotateX(var(--tiltX)) rotateY(var(--tiltY));
   transform-origin: center;
   will-change: transform;
 }
-
-/* ensure the summary panel itself never clips button shadows */
 .hero-main .panel{ overflow: visible; }
 
 .kicker{
@@ -522,6 +515,7 @@ footer{
 }
 @keyframes spin{ to { transform: rotate(360deg); } }
 
+/* keep desktop behavior: reticle hidden only on small screens */
 @media (max-width: 980px){
   .reticle{ display:none; }
 }
@@ -557,83 +551,39 @@ footer{
   gap: 10px;
   width: min(360px, calc(100% - 36px));
 }
-.toast .t{
-  border-radius: 16px;
-  border: 1px solid rgba(0,229,255,.26);
-  background: rgba(10,6,18,.72);
-  backdrop-filter: blur(12px);
-  box-shadow: 0 20px 80px rgba(0,0,0,.6);
-  padding: 12px 12px;
-  transform: translateY(10px);
-  opacity: 0;
-  animation: toastIn .35s ease forwards;
-}
-@keyframes toastIn{ to { transform: translateY(0); opacity: 1; } }
-.toast .title{
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  letter-spacing: .12em;
-  font-size: 12px;
-  text-transform: uppercase;
-}
-.toast .msg{ margin-top: 6px; color: var(--muted); font-size: 13px; }
-.toast .bar{ margin-top: 10px; height: 6px; border-radius: 999px; background: rgba(255,255,255,.08); overflow:hidden; }
-.toast .bar > i{
-  display:block; height:100%; width:100%;
-  background: linear-gradient(90deg, var(--cyan), var(--mag), var(--acid));
-  transform-origin: left;
-  animation: toastTimer 3.2s linear forwards;
-}
-@keyframes toastTimer{ to { transform: scaleX(0); } }
-
-/* Reduced motion */
-@media (prefers-reduced-motion: reduce){
-  .boot-panel::before,
-  .boot-fill,
-  .pulse,
-  .glitch::before,
-  .glitch::after{ animation: none !important; }
-}
-
-/* FX LOW mode */
-:root[data-fx="0"] .reticle{ display:none !important; }
-:root[data-fx="0"] .glitch::before,
-:root[data-fx="0"] .glitch::after{ opacity: .18; }
-:root[data-fx="0"] .vignette{ opacity: .30; }
-
-/* Arcade mode */
-:root[data-arcade="1"] .noise{ opacity: .30; }
-:root[data-arcade="1"] .vignette{ opacity: .48; }
-:root[data-arcade="1"] .glitch::before,
-:root[data-arcade="1"] .glitch::after{ opacity: .75; }
-
-:root[data-arcade="1"] body::after{
-  content:"";
-  position: fixed;
-  inset: 0;
-  pointer-events:none;
-  z-index: 55;
-  background:
-    repeating-linear-gradient(
-      to bottom,
-      rgba(255,255,255,.035) 0px,
-      rgba(255,255,255,.035) 1px,
-      transparent 2px,
-      transparent 5px
-    );
-  mix-blend-mode: overlay;
-  opacity: .35;
-}
-:root[data-arcade="1"] .glitch{
-  text-shadow:
-    0 0 22px rgba(0,229,255,.22),
-    0 0 40px rgba(255,43,214,.14);
-  filter: saturate(1.15) contrast(1.05);
-}
 
 /* =========================
    TARGETS + PANELS
 ========================= */
+.tile{ --panel-open: 900px; } /* fallback; JS overwrites */
 
+.panel{
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  pointer-events: none;
+
+  transition:
+    max-height var(--openMs) var(--panelEase),
+    opacity 500ms ease;
+}
+
+.tile.unlocked .panel{
+  max-height: var(--panel-open);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Prevent empty top gap: remove target from layout when unlocked */
+.tile.unlocked .target.main-target{ display:none; }
+.tile.locked .target.main-target{ display:grid; }
+
+/* Section tile padding states */
+.tile.section-card{ padding: 20px; }
+.tile.section-card.locked{ padding: 0 !important; }
+.tile.section-card.unlocked{ padding: 20px !important; }
+
+/* Target button */
 .target{
   width: 100%;
   min-height: var(--targetH);
@@ -684,9 +634,7 @@ footer{
   background: rgba(10, 16, 24, .45);
   height: 520px;
 }
-.resume-preview.expanded{
-  height: min(86vh, 980px);
-}
+.resume-preview.expanded{ height: min(86vh, 980px); }
 .resume-object{
   width: 100%;
   height: 100%;
@@ -716,60 +664,8 @@ footer{
   font-size: 1.05rem;
 }
 
-/* Panel mechanics */
-.tile{
-  --panel-open: 2400px; /* JS overwrites */
-}
-
-.panel{
-  position: relative;
-  overflow: hidden;
-  max-height: 0;
-  opacity: 0;
-  pointer-events: none;
-  will-change: max-height, opacity;
-
-  transition:
-    max-height var(--closeMs) var(--panelEase),
-    opacity calc(var(--closeMs) * .55) ease;
-}
-
-.tile.unlocked .panel{
-  max-height: var(--panel-open);
-  opacity: 1;
-  pointer-events: auto;
-
-  transition:
-    max-height var(--openMs) var(--panelEase),
-    opacity calc(var(--openMs) * .55) ease;
-}
-
-/* Hide main target completely when unlocked to prevent empty top gap */
-.tile.unlocked .target.main-target{
-  display: none;
-}
-
-.tile.locked .target.main-target{
-  display: grid;
-}
-
-/* Seamless tile close: padding behavior (unlocked must restore padding) */
-.tile.section-card{
-  transition:
-    padding var(--closeMs) var(--panelEase),
-    border-radius var(--closeMs) var(--panelEase);
-}
-.tile.section-card{ padding: 20px; }
-.tile.section-card.locked{
-  padding: 0 !important;
-  border-radius: 20px;
-}
-.tile.section-card.unlocked{
-  padding: 20px !important;
-}
-
 /* =========================
-   HUD Targets
+   HUD Targets (desktop default)
 ========================= */
 .targets-hud{
   position: fixed;
@@ -793,9 +689,6 @@ footer{
   user-select: none;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-}
-@media (max-width: 980px){
-  #targetsHud{ display:none; }
 }
 
 /* =========================
@@ -898,3 +791,33 @@ footer{
 .settings-summary.icon-btn:active{ transform: translateY(0) scale(.98); }
 
 #pointsResetBtn{ min-width: 78px; }
+
+/* =========================
+   MOBILE OVERRIDES (coarse pointer)
+   Keep desktop identical; only change mobile.
+========================= */
+@media (pointer: coarse){
+  /* make targets feel tappable */
+  .target{ cursor: pointer; }
+
+  /* show HUD as bottom nav (do NOT hide on mobile) */
+  #targetsHud{
+    inset: auto 0 10px 0;
+    height: auto;
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 0 12px;
+    pointer-events: auto;
+  }
+  #targetsHud .hud-target{
+    position: static;
+    transform: none !important;
+    padding: 12px 14px;
+    border-radius: 14px;
+  }
+
+  /* extra bottom breathing room so bottom HUD doesn’t cover content */
+  body{ padding-bottom: 76px; }
+}
