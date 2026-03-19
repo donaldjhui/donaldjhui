@@ -1,17 +1,25 @@
 /* =========================================================
-   main.js (desktop preserved + mobile friendly + settings fixed)
-   + Points rewards:
-     - +250 points when unlocking a section
-     - every 1000 points: motivational toast
+   main.js (FULL)
+   - Same behavior on mobile + desktop (responsive layout handled by CSS)
+   - Targets always spawn (if possible) on all devices
+   - Arcade ON: DVD bounce forever / Arcade OFF: targets still
+   - Points reset each page load
+   - Arcade OFF by default each page load
+   - +250 points per section unlock
+   - +100 points per game target hit
+   - every 1000 points: motivational toast
+   - Music works (ambient vs arcade track)
+   - FX always HIGH (no FX toggle)
+   - Targets will NEVER overlap protected text/panels/preview/HUD/settings/toasts:
+       If content scrolls/expands into them, they shatter + respawn.
+       If nowhere valid exists, they despawn (do not spawn).
 ========================================================= */
 
 (() => {
   try { if ("scrollRestoration" in history) history.scrollRestoration = "manual"; } catch { }
-
   if (location.hash) {
     try { history.replaceState(null, "", location.pathname + location.search); } catch { }
   }
-
   const forceTop = () => window.scrollTo(0, 0);
   forceTop();
   window.addEventListener("DOMContentLoaded", forceTop, { once: true });
@@ -20,7 +28,6 @@
 })();
 
 const root = document.documentElement;
-const isCoarse = matchMedia?.("(pointer: coarse)")?.matches || "ontouchstart" in window;
 
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
 function lsSet(key, val) { try { localStorage.setItem(key, val); } catch { } }
@@ -39,23 +46,23 @@ const xpFill = document.getElementById("xpFill");
 const toastHost = document.getElementById("toast");
 
 /* ---------- Storage keys ---------- */
-const LS_ARCADE = "arcadeMode";
-const LS_FX = "fxHigh";
 const LS_SFX_ON = "sfxOn";
 const LS_MUSIC_ON = "musicOn";
-const LS_POINTS = "points_v1";
 const LS_ACH = "achievements_v3";
-/* NEW: store last thousand milestone we toasted */
 const LS_MILESTONE = "points_milestone_v1";
 
 /* ---------- State ---------- */
-let arcadeMode = (lsGet(LS_ARCADE) ?? "0") === "1";
-let fxHigh = (lsGet(LS_FX) ?? "0") === "1";
+/* Arcade OFF by default (not persisted) */
+let arcadeMode = false;
+root.dataset.arcade = "0";
+
+/* FX always HIGH */
+let fxHigh = true;
+root.dataset.fx = "1";
+
+/* Persist SFX + Music */
 let sfxOn = (lsGet(LS_SFX_ON) ?? "1") === "1";
 let musicOn = (lsGet(LS_MUSIC_ON) ?? "0") === "1";
-
-root.dataset.arcade = arcadeMode ? "1" : "0";
-root.dataset.fx = fxHigh ? "1" : "0";
 
 /* ---------- Toasts / Achievements ---------- */
 function toast(title, msg) {
@@ -82,7 +89,12 @@ function unlock(key, title, msg) {
   toast("ACHIEVEMENT UNLOCKED", `${title} — ${msg}`);
 }
 
-/* ---------- Motivational quotes every 1000 points ---------- */
+/* ---------- Points (reset every load) ---------- */
+let points = 0;
+const pointsEl = document.getElementById("pointsValue");
+function renderPoints() { if (pointsEl) pointsEl.textContent = String(points); }
+
+/* Motivational quotes every 1000 points */
 const QUOTES = [
   "Keep going — consistency beats intensity.",
   "You’re building momentum. Stay with it.",
@@ -112,30 +124,23 @@ function checkPointMilestone() {
   }
 }
 
-/* ---------- Points ---------- */
-let points = 0;
-const pointsEl = document.getElementById("pointsValue");
-
-// Points reset every page load
-points = 0;
-if (pointsEl) pointsEl.textContent = "0";
-checkPointMilestone();
-
-function renderPoints() { if (pointsEl) pointsEl.textContent = String(points); }
-
-function addPoints(n){
+function addPoints(n) {
   points = Math.max(0, points + n);
   renderPoints();
   checkPointMilestone();
 }
 
-function resetPoints(){
+function resetPoints() {
   points = 0;
   renderPoints();
-
   lastMilestone = 0;
   lsSet(LS_MILESTONE, "0");
 }
+
+/* Reset every page load */
+resetPoints();
+
+/* Reset button (resets current session points) */
 document.getElementById("pointsResetBtn")?.addEventListener("click", resetPoints);
 
 /* ---------- XP bar ---------- */
@@ -153,7 +158,6 @@ updateXP();
 /* ---------- Tilt / reticle ---------- */
 function shouldTilt() {
   if (!fxHigh) return false;
-  if (isCoarse) return false;
   if (matchMedia?.("(prefers-reduced-motion: reduce)").matches) return false;
   if (window.innerWidth < 860) return false;
   return true;
@@ -165,7 +169,7 @@ window.addEventListener("pointermove", (e) => {
   root.style.setProperty("--mx", xPct.toFixed(2) + "%");
   root.style.setProperty("--my", yPct.toFixed(2) + "%");
 
-  if (reticle && !isCoarse) {
+  if (reticle) {
     reticle.style.left = e.clientX + "px";
     reticle.style.top = e.clientY + "px";
   }
@@ -254,7 +258,49 @@ function bleep(freq = 660, dur = 0.05, type = "sine", gainMult = 1) {
   o.stop(t0 + dur + 0.02);
 }
 
-/* ---------- Settings dropdown: close only by gear/outside/esc (no auto close on toggle) ---------- */
+/* ---------- Music engine ---------- */
+const bgmAmbient = document.getElementById("bgmAmbient");
+const bgmArcade = document.getElementById("bgmArcade");
+let bgmUnlocked = false;
+const MUSIC_VOL = 0.16;
+
+function applyMusicState() {
+  if (!musicOn) {
+    try { bgmAmbient?.pause(); } catch { }
+    try { bgmArcade?.pause(); } catch { }
+    return;
+  }
+
+  const wantArcade = arcadeMode;
+  const on = wantArcade ? bgmArcade : bgmAmbient;
+  const off = wantArcade ? bgmAmbient : bgmArcade;
+
+  try { off?.pause(); } catch { }
+  if (on) on.volume = MUSIC_VOL;
+
+  if (!bgmUnlocked) return;
+  try { on?.play(); } catch { }
+}
+
+function unlockBgmOnce() {
+  if (bgmUnlocked) return;
+  bgmUnlocked = true;
+  applyMusicState();
+}
+
+window.addEventListener("pointerdown", unlockBgmOnce, { once: true, passive: true });
+window.addEventListener("keydown", unlockBgmOnce, { once: true });
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") {
+    try { bgmAmbient?.pause(); } catch { }
+    try { bgmArcade?.pause(); } catch { }
+  } else {
+    applyMusicState();
+  }
+});
+
+/* ---------- Settings dropdown: do NOT auto-close on toggle ---------- */
 (() => {
   const settingsMenu = document.getElementById("settingsMenu");
   if (!settingsMenu) return;
@@ -276,10 +322,9 @@ function bleep(freq = 660, dur = 0.05, type = "sine", gainMult = 1) {
   });
 })();
 
-/* ---------- Settings toggles ---------- */
+/* ---------- Settings toggles (NO FX toggle) ---------- */
 (() => {
   const arcadeBtn = document.getElementById("arcadeToggle");
-  const fxBtn = document.getElementById("fxToggle");
   const sfxBtn = document.getElementById("sfxToggle");
   const musicBtn = document.getElementById("musicToggle");
 
@@ -287,10 +332,6 @@ function bleep(freq = 660, dur = 0.05, type = "sine", gainMult = 1) {
     if (arcadeBtn) {
       arcadeBtn.setAttribute("aria-pressed", arcadeMode ? "true" : "false");
       arcadeBtn.textContent = `ARCADE: ${arcadeMode ? "ON" : "OFF"}`;
-    }
-    if (fxBtn) {
-      fxBtn.setAttribute("aria-pressed", fxHigh ? "true" : "false");
-      fxBtn.textContent = `FX: ${fxHigh ? "HIGH" : "LOW"}`;
     }
     if (sfxBtn) {
       sfxBtn.setAttribute("aria-pressed", sfxOn ? "true" : "false");
@@ -302,24 +343,17 @@ function bleep(freq = 660, dur = 0.05, type = "sine", gainMult = 1) {
     }
 
     root.dataset.arcade = arcadeMode ? "1" : "0";
-    root.dataset.fx = fxHigh ? "1" : "0";
+    root.dataset.fx = "1";
   }
 
   syncToggleUI();
 
   arcadeBtn?.addEventListener("click", () => {
     arcadeMode = !arcadeMode;
-    lsSet(LS_ARCADE, arcadeMode ? "1" : "0");
     syncToggleUI();
     unlock("arcade", "Arcade Mode", arcadeMode ? "Enabled." : "Disabled.");
     bleep(520, 0.05, "sawtooth", 0.8);
-  });
-
-  fxBtn?.addEventListener("click", () => {
-    fxHigh = !fxHigh;
-    lsSet(LS_FX, fxHigh ? "1" : "0");
-    syncToggleUI();
-    unlock("fx_toggle", "FX", fxHigh ? "High effects." : "Low effects.");
+    applyMusicState();
   });
 
   sfxBtn?.addEventListener("click", () => {
@@ -338,22 +372,14 @@ function bleep(freq = 660, dur = 0.05, type = "sine", gainMult = 1) {
     lsSet(LS_MUSIC_ON, musicOn ? "1" : "0");
     syncToggleUI();
     unlock("music_toggle", "Music", musicOn ? "Enabled." : "Disabled.");
+    bgmUnlocked = true; // gesture
+    applyMusicState();
   });
-
-  if (!isCoarse) {
-    document.addEventListener("pointerdown", (e) => {
-      if (!sfxOn) return;
-      const t = e.target;
-      if (!(t instanceof Element)) return;
-      if (t.closest("a, button, .btn")) bleep(520, 0.04, "square", 0.75);
-    }, { passive: true });
-  }
 })();
 
 /* ---------- Muzzle ---------- */
 function muzzleFlash(x, y) {
   if (!muzzle || !fxHigh) return;
-  if (isCoarse) return;
   muzzle.style.left = x + "px";
   muzzle.style.top = y + "px";
   muzzle.classList.remove("fire");
@@ -361,97 +387,73 @@ function muzzleFlash(x, y) {
   muzzle.classList.add("fire");
 }
 
-/* ---------- Particles ---------- */
-const fx = document.getElementById("fx");
-const ctx2 = fx?.getContext("2d");
-
-let rafId = null;
-let running = false;
-let lastT = 0;
-
-const particleCap = 600;
-const particles = [];
-
-function resizeFx() {
-  if (!fx) return;
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  fx.width = Math.floor(innerWidth * dpr);
-  fx.height = Math.floor(innerHeight * dpr);
-  fx.style.width = innerWidth + "px";
-  fx.style.height = innerHeight + "px";
-  if (ctx2) ctx2.setTransform(dpr, 0, 0, dpr, 0, 0);
-}
-window.addEventListener("resize", resizeFx, { passive: true });
-resizeFx();
-
-function startFX() {
-  if (running) return;
-  running = true;
-  lastT = performance.now();
-  rafId = requestAnimationFrame(tick);
-}
-function stopFX() {
-  if (!running) return;
-  running = false;
-  if (rafId) cancelAnimationFrame(rafId);
-  rafId = null;
+/* ---------- Shatter effect (DOM shards) ---------- */
+let shardLayer = null;
+function ensureShardLayer() {
+  if (shardLayer) return shardLayer;
+  shardLayer = document.createElement("div");
+  shardLayer.className = "shard-layer";
+  document.body.appendChild(shardLayer);
+  return shardLayer;
 }
 
-function spawn(x, y, n = 18, power = 1) {
-  if (!ctx2 || !fxHigh) return;
+function shatterAt(x, y, count = 18) {
+  const layer = ensureShardLayer();
 
-  if (innerWidth < 980) n = Math.max(6, Math.floor(n * 0.6));
-
-  for (let i = 0; i < n; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const s = (Math.random() * 2.6 + 1.2) * power;
-    particles.push({
-      x, y,
-      vx: Math.cos(a) * s,
-      vy: Math.sin(a) * s,
-      life: 1,
-      r: Math.random() * 2.2 + 0.8,
-      hue: [190, 310, 95][Math.floor(Math.random() * 3)],
-    });
+  function pickColor() {
+    const r = Math.random();
+    if (r < 0.70) {
+      const neutrals = [
+        "rgba(245,247,250,.95)",
+        "rgba(210,218,228,.95)",
+        "rgba(160,170,182,.90)",
+        "rgba(90,98,110,.85)",
+        "rgba(35,40,48,.80)",
+      ];
+      return neutrals[(Math.random() * neutrals.length) | 0];
+    }
+    if (r < 0.90) return "rgba(245,247,250,.95)";
+    if (r < 0.97) return "rgba(0,229,255,.55)";
+    return "rgba(255,43,214,.40)";
   }
 
-  if (particles.length > particleCap) particles.splice(0, particles.length - particleCap);
-  startFX();
-}
+  for (let i = 0; i < count; i++) {
+    const s = document.createElement("i");
+    s.className = "shard";
+    s.style.left = x + "px";
+    s.style.top = y + "px";
 
-function tick(t) {
-  if (!ctx2) return stopFX();
-  const dt = Math.min(0.05, (t - lastT) / 1000);
-  lastT = t;
+    const w = 4 + Math.random() * 10;
+    const h = 3 + Math.random() * 9;
+    s.style.width = w.toFixed(1) + "px";
+    s.style.height = h.toFixed(1) + "px";
+    s.style.borderRadius = (Math.random() < 0.55 ? 1 : 3) + "px";
 
-  ctx2.clearRect(0, 0, innerWidth, innerHeight);
+    const c = pickColor();
+    s.style.background = c;
 
-  for (let i = particles.length - 1; i >= 0; i--) {
-    const p = particles[i];
-    p.life -= 0.9 * dt;
-    p.x += p.vx;
-    p.y += p.vy;
-    p.vx *= 0.98;
-    p.vy = p.vy * 0.98 + 0.03;
+    const isBright = c.includes("245,247,250") || c.includes("210,218,228");
+    s.style.boxShadow = isBright
+      ? "0 0 10px rgba(255,255,255,.22)"
+      : "0 0 8px rgba(0,0,0,.16)";
 
-    if (p.life <= 0) { particles.splice(i, 1); continue; }
+    const ang = Math.random() * Math.PI * 2;
+    const dist = 26 + Math.random() * 90;
+    const dx = Math.cos(ang) * dist;
+    const dy = Math.sin(ang) * dist;
+    const rot = (Math.random() * 720 - 360) + "deg";
 
-    ctx2.globalAlpha = Math.max(p.life, 0);
-    ctx2.fillStyle = `hsla(${p.hue}, 100%, 65%, ${p.life})`;
-    ctx2.beginPath();
-    ctx2.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-    ctx2.fill();
+    s.animate(
+      [
+        { transform: "translate(-50%, -50%) scale(1)", opacity: 1, filter: "blur(0px)" },
+        { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) rotate(${rot}) scale(.75)`, opacity: 0, filter: "blur(.2px)" }
+      ],
+      { duration: 520 + Math.random() * 320, easing: "cubic-bezier(.2,.9,.2,1)", fill: "forwards" }
+    );
+
+    layer.appendChild(s);
+    setTimeout(() => s.remove(), 1000);
   }
-  ctx2.globalAlpha = 1;
-
-  if (!particles.length) return stopFX();
-  rafId = requestAnimationFrame(tick);
-}
-
-if (!isCoarse) {
-  document.addEventListener("pointerdown", (e) => {
-    spawn(e.clientX, e.clientY, arcadeMode ? 22 : 12, arcadeMode ? 1.05 : 0.85);
-  }, { passive: true });
 }
 
 /* ---------- Resume click achievement ---------- */
@@ -496,9 +498,18 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
 
     btn.setAttribute("aria-expanded", "true");
 
-    // +250 points for unlocking a section
-    addPoints(SECTION_UNLOCK_POINTS);
+    // If opening Resume, ensure preview starts open
+    if (tile.id === "resume") {
+      const wrap = document.getElementById("resumePreviewWrap");
+      if (wrap) {
+        wrap.classList.add("expanded");
+        wrap.classList.remove("collapsed");
+      }
+      // force a "collision enforce" cycle in game targets (they listen to scroll)
+      window.dispatchEvent(new Event("scroll"));
+    }
 
+    addPoints(SECTION_UNLOCK_POINTS);
     unlock(
       "target_" + (tile.id || Math.random().toString(16).slice(2)),
       "Section Opened",
@@ -512,42 +523,35 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
     const wrap = document.getElementById("resumePreviewWrap");
     if (!wrap) return;
 
-    const expanded = wrap.classList.toggle("expanded");
-    btn.setAttribute("aria-expanded", expanded ? "true" : "false");
+    const isExpanded = wrap.classList.toggle("expanded");
+    wrap.classList.toggle("collapsed", !isExpanded);
+
+    btn.setAttribute("aria-expanded", isExpanded ? "true" : "false");
 
     const sub = btn.querySelector(".target-sub");
-    if (sub) {
-      const word = isCoarse ? "Tap" : "Shoot";
-      sub.textContent = expanded ? `${word} to collapse` : `${word} to expand`;
-    }
+    if (sub) sub.textContent = isExpanded ? "Shoot to collapse" : "Shoot to expand";
+
+    // Trigger collision re-check so targets relocate if preview overlaps them
+    window.dispatchEvent(new Event("scroll"));
 
     const tile = btn.closest(".tile");
     if (tile) setPanelHeights(tile);
-  }
-
-  if (isCoarse) {
-    document.querySelectorAll(".target.main-target .target-sub").forEach((el) => (el.textContent = "Tap to reveal"));
-    document.querySelectorAll('.target[data-action="resumeExpand"] .target-sub').forEach((el) => (el.textContent = "Tap to expand"));
   }
 
   measureAll();
   window.addEventListener("load", () => { measureAll(); requestAnimationFrame(measureAll); }, { passive: true });
   window.addEventListener("resize", () => measureAll(), { passive: true });
 
-  // Mobile: tap buttons
-  if (isCoarse) {
-    document.addEventListener("click", (e) => {
-      const btn = e.target instanceof Element ? e.target.closest(".target") : null;
-      if (!btn) return;
+  // Click-to-open (works on mobile too)
+  document.addEventListener("click", (e) => {
+    const btn = e.target instanceof Element ? e.target.closest(".target") : null;
+    if (!btn) return;
 
-      if (btn.dataset.action === "resumeExpand") return toggleResumePreview(btn);
-      if (btn.classList.contains("main-target")) return unlockFromMainTarget(btn);
-    }, { passive: true });
+    if (btn.dataset.action === "resumeExpand") return toggleResumePreview(btn);
+    if (btn.classList.contains("main-target")) return unlockFromMainTarget(btn);
+  }, { passive: true });
 
-    return;
-  }
-
-  // Desktop: shoot
+  // Desktop shooting also works
   function shootAt(x, y) {
     bleep(180, 0.035, "square", 1.0);
     bleep(90, 0.02, "sine", 0.7);
@@ -556,7 +560,6 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
     const sy = reticle ? parseFloat(reticle.style.top) || y : y;
 
     muzzleFlash(sx, sy);
-    spawn(x, y, arcadeMode ? 18 : 10, arcadeMode ? 1.05 : 0.85);
 
     const stack = document.elementsFromPoint(x, y);
     const hitTarget = stack.find((n) => n instanceof Element && n.classList?.contains("target"));
@@ -568,7 +571,13 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
 
   document.addEventListener("pointerdown", (e) => {
     const el = e.target instanceof Element ? e.target : null;
-    if (el && el.closest(".topbar, footer, a, button:not(.target), .btn, .card, .card *, input, textarea, select")) return;
+    if (!el) return;
+
+    // IMPORTANT: if user is interacting with a target button (like PREVIEW), let the click handler handle it
+    if (el.closest(".target")) return;
+
+    if (el.closest(".topbar, footer, a, button, .btn, .card, .card *, input, textarea, select")) return;
+
     shootAt(e.clientX, e.clientY);
   }, { passive: false });
 
@@ -579,10 +588,11 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
   });
 })();
 
-/* ---------- HUD ---------- */
+/* ---------- Hamburger nav (replaces left HUD) ---------- */
 (() => {
-  const hud = document.getElementById("targetsHud");
-  if (!hud) return;
+  const navMenu = document.getElementById("navMenu");
+  const panel = document.querySelector("#navMenu .nav-panel");
+  if (!navMenu || !panel) return;
 
   const items = [
     { label: "Summary", sel: "#summary" },
@@ -592,58 +602,40 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
     { label: "Contact", sel: "#contact" },
   ];
 
-  hud.innerHTML = items.map((i) => `<button class="hud-target" type="button" data-target="${i.sel}">${i.label}</button>`).join("");
-  const btns = Array.from(hud.querySelectorAll(".hud-target"));
+  panel.innerHTML = items
+    .map((i) => `<button class="nav-link" type="button" data-target="${i.sel}">${i.label}</button>`)
+    .join("");
 
-  function topbarH() {
-    const topbar = document.querySelector(".topbar");
-    return topbar ? Math.ceil(topbar.getBoundingClientRect().height) : 70;
-  }
-  function containerLeft() {
-    const c = document.querySelector(".container");
-    return c ? c.getBoundingClientRect().left : 0;
-  }
-
-  function dockDesktop() {
-    if (isCoarse) return; // mobile bottom nav is handled by CSS
-    const padX = 12;
-    const gap = 6;
-    const y0 = topbarH() + 18;
-    const gutterRight = Math.max(padX, Math.floor(containerLeft() - padX));
-
-    let y = y0;
-    btns.forEach((btn) => {
-      btn.style.left = "0px";
-      btn.style.top = "0px";
-      btn.style.transform = `translate(${padX}px, ${y}px)`;
-      const r = btn.getBoundingClientRect();
-      btn.style.display = r.right > gutterRight ? "none" : "";
-      y += r.height + gap;
-    });
-  }
-
-  btns.forEach((btn) => {
+  panel.querySelectorAll(".nav-link").forEach((btn) => {
     btn.addEventListener("click", () => {
       const sel = btn.getAttribute("data-target") || "";
       document.querySelector(sel)?.scrollIntoView({ behavior: "smooth", block: "start" });
-      if (!isCoarse) bleep(660, 0.03, "square", 0.55);
-    }, { passive: true });
+      navMenu.open = false;
+    });
   });
 
-  window.addEventListener("resize", dockDesktop, { passive: true });
-  window.addEventListener("load", dockDesktop, { passive: true });
-  dockDesktop();
+  // close on outside click
+  document.addEventListener("pointerdown", (e) => {
+    if (!navMenu.open) return;
+    const t = e.target instanceof Element ? e.target : null;
+    if (!t) return;
+    if (t.closest("#navMenu")) return;
+    navMenu.open = false;
+  }, { capture: true });
+
+  // close on ESC
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") navMenu.open = false;
+  });
 })();
 
-/* ---------- Game Targets: desktop only (Arcade = DVD bounce) ---------- */
+/* ---------- Game Targets (despawn-on-collision, INSTANT respawn when space exists) ---------- */
 (() => {
-  if (isCoarse) return;
-
   const layer = document.getElementById("gameLayer");
   if (!layer) return;
 
   const MIN = 5, MAX = 10;
-  const POINTS_PER_HIT = 10;
+  const POINTS_PER_HIT = 100;
   const SIZE = 54;
   const PAD = 10;
 
@@ -651,155 +643,124 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
   let raf = null;
   let last = 0;
 
+  let targetGoal = 0;
+
+  // respawn scheduler (RAF id)
+  let respawnTimer = null;
+
   const randInt = (a, b) => Math.floor(a + Math.random() * (b - a + 1));
 
   function candidateRect(x, y) { return { l: x, t: y, r: x + SIZE, b: y + SIZE }; }
 
-  function protectedRects() {
-    const blocks = [];
-    const bento = document.querySelector(".bento");
-    if (bento) blocks.push(expandRect(rectOf(bento), 8));
-    const topbar = document.querySelector(".topbar");
-    if (topbar) blocks.push(expandRect(rectOf(topbar), 6));
-    const footerC = document.querySelector("footer .container");
-    if (footerC) blocks.push(expandRect(rectOf(footerC), 8));
-    document.querySelectorAll("#targetsHud .hud-target").forEach((btn) => blocks.push(expandRect(rectOf(btn), 10)));
-    return blocks;
+  function viewportInfo() {
+    const vv = window.visualViewport;
+    const w = vv?.width ?? innerWidth;
+    const h = vv?.height ?? innerHeight;
+    const ox = vv?.offsetLeft ?? 0;
+    const oy = vv?.offsetTop ?? 0;
+    return { w, h, ox, oy };
   }
 
-  function worldBounds() { return { l: PAD, t: PAD, r: innerWidth - PAD, b: innerHeight - PAD }; }
+  // NOTE: we spawn in viewport coordinates (overlay), but use visualViewport offsets for mobile correctness
+  function worldBounds() {
+    const { w, h, ox, oy } = viewportInfo();
+    return { l: PAD + ox, t: PAD + oy, r: ox + w - PAD, b: oy + h - PAD };
+  }
 
-  function overlapsLiveTargets(rr) {
+  function protectedRects() {
+    const blocks = [];
+    const { w: vw, h: vh, ox, oy } = viewportInfo();
+
+    // Visible viewport in *viewport coordinate space* (same as getBoundingClientRect)
+    const view = { l: ox, t: oy, r: ox + vw, b: oy + vh };
+
+    function pushIfVisible(rect, pad) {
+      if (!rect) return;
+      const rw = rect.r - rect.l;
+      const rh = rect.b - rect.t;
+      if (rw <= 10 || rh <= 10) return;
+      if (!intersects(rect, view)) return;
+      blocks.push(expandRect(rect, pad));
+    }
+
+    // Protect only visible "Shoot to reveal" buttons
+    document.querySelectorAll(".tile.locked .target.main-target").forEach((t) => {
+      pushIfVisible(rectOf(t), 10);
+    });
+
+    // Topbar
+    const topbar = document.querySelector(".topbar");
+    pushIfVisible(topbar ? rectOf(topbar) : null, 6);
+
+    // Footer only when visible
+    const footerC = document.querySelector("footer .container");
+    pushIfVisible(footerC ? rectOf(footerC) : null, 8);
+
+    // Open panels (only if visible)
+    document.querySelectorAll(".tile.unlocked .panel").forEach((p) => {
+      pushIfVisible(rectOf(p), 8);
+    });
+
+    // Resume preview when expanded (only if visible)
+    const resumeWrap = document.getElementById("resumePreviewWrap");
+    if (resumeWrap && resumeWrap.classList.contains("expanded")) {
+      pushIfVisible(rectOf(resumeWrap), 8);
+    }
+
+    // Settings panel when open
+    const settingsPanel = document.querySelector("#settingsMenu[open] .settings-panel");
+    pushIfVisible(settingsPanel ? rectOf(settingsPanel) : null, 8);
+
+    // Toast area
+    if (toastHost) pushIfVisible(rectOf(toastHost), 8);
+
+    // Drop accidental near-fullscreen blockers
+    return blocks.filter((r) => {
+      const rw = Math.max(0, r.r - r.l);
+      const rh = Math.max(0, r.b - r.t);
+      return !(rw > vw * 0.98 && rh > vh * 0.90);
+    });
+  }
+
+  function overlapsLiveTargets(rr, ignoreEnt = null) {
     for (const e of ents) {
       if (!e.alive) continue;
+      if (ignoreEnt && e === ignoreEnt) continue;
       if (intersects(rr, candidateRect(e.x, e.y))) return true;
     }
     return false;
   }
 
-  function isValidSpawn(x, y) {
+  function isValidSpawn(x, y, ignoreEnt = null) {
     const bounds = worldBounds();
     const rr = candidateRect(x, y);
+
     if (rr.l < bounds.l || rr.t < bounds.t || rr.r > bounds.r || rr.b > bounds.b) return false;
+
     const blocks = protectedRects();
     if (blocks.some((b) => intersects(rr, b))) return false;
-    if (overlapsLiveTargets(rr)) return false;
+
+    if (overlapsLiveTargets(rr, ignoreEnt)) return false;
     return true;
   }
 
-  function pickSpawnPoint() {
+  function pickSpawnPoint(ignoreEnt = null) {
     const bounds = worldBounds();
     for (let tries = 0; tries < 1400; tries++) {
       const x = randInt(bounds.l, Math.max(bounds.l, bounds.r - SIZE));
       const y = randInt(bounds.t, Math.max(bounds.t, bounds.b - SIZE));
-      if (isValidSpawn(x, y)) return { x, y };
+      if (isValidSpawn(x, y, ignoreEnt)) return { x, y };
     }
     return null;
   }
 
-  function stop() { if (raf) cancelAnimationFrame(raf); raf = null; }
   function setPos(e) { e.el.style.transform = `translate(${e.x}px, ${e.y}px)`; }
-  function clearWave() { stop(); ents = []; layer.innerHTML = ""; }
-  function waveCleared() { return ents.length > 0 && ents.every((e) => !e.alive); }
-
-  function hit(e) {
-    if (!e.alive) return;
-    e.alive = false;
-
-    addPoints(POINTS_PER_HIT);
-    bleep(740, 0.04, "square", 0.75);
-
-    e.el.classList.add("hit");
-    setTimeout(() => {
-      try { e.el.remove(); } catch { }
-      if (waveCleared()) setTimeout(spawnWave, 500);
-    }, 260);
-  }
 
   function giveVelocity(ent) {
-    // DVD-style: constant speed, diagonal-ish
-    const speed = 180 + Math.random() * 170; // px/s
+    const speed = 180 + Math.random() * 140;
     const ang = Math.random() * Math.PI * 2;
     ent.vx = Math.cos(ang) * speed;
     ent.vy = Math.sin(ang) * speed;
-  }
-
-  function spawnWave() {
-    clearWave();
-
-    const count = randInt(MIN, MAX);
-    for (let i = 0; i < count; i++) {
-      const el = document.createElement("button");
-      el.type = "button";
-      el.className = "game-target";
-      el.textContent = String(i + 1);
-      layer.appendChild(el);
-
-      const p = pickSpawnPoint();
-      if (!p) { el.remove(); break; }
-
-      const ent = {
-        el,
-        alive: true,
-        x: p.x,
-        y: p.y,
-        vx: 0,
-        vy: 0,
-        w: SIZE,
-        h: SIZE,
-      };
-
-      // If arcade is on at spawn time, start moving
-      if (arcadeMode) giveVelocity(ent);
-
-      setPos(ent);
-      el.addEventListener("click", () => hit(ent), { passive: true });
-      ents.push(ent);
-    }
-
-    if (arcadeMode) start();
-  }
-
-  function tick(t) {
-    const dt = Math.min(0.033, (t - last) / 1000);
-    last = t;
-
-    const bounds = worldBounds();
-    const blocks = protectedRects();
-
-    for (const e of ents) {
-      if (!e.alive) continue;
-
-      // if arcade toggled off, freeze
-      if (!arcadeMode) {
-        e.vx = 0; e.vy = 0;
-        setPos(e);
-        continue;
-      }
-
-      e.x += e.vx * dt;
-      e.y += e.vy * dt;
-
-      // bounce on screen edges (DVD)
-      if (e.x <= bounds.l) { e.x = bounds.l; e.vx *= -1; }
-      if (e.y <= bounds.t) { e.y = bounds.t; e.vy *= -1; }
-      if (e.x + e.w >= bounds.r) { e.x = bounds.r - e.w; e.vx *= -1; }
-      if (e.y + e.h >= bounds.b) { e.y = bounds.b - e.h; e.vy *= -1; }
-
-      // bounce away from protected rects
-      const rr = { l: e.x, t: e.y, r: e.x + e.w, b: e.y + e.h };
-      if (blocks.some((b) => intersects(rr, b))) {
-        // revert and flip direction
-        e.x -= e.vx * dt;
-        e.y -= e.vy * dt;
-        e.vx *= -1;
-        e.vy *= -1;
-      }
-
-      setPos(e);
-    }
-
-    raf = requestAnimationFrame(tick);
   }
 
   function start() {
@@ -808,7 +769,133 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
     raf = requestAnimationFrame(tick);
   }
 
-  // Priority hit handler
+  function stop() {
+    if (raf) cancelAnimationFrame(raf);
+    raf = null;
+  }
+
+  function aliveCount() {
+    return ents.filter((e) => e.alive).length;
+  }
+
+  function hit(e) {
+    if (!e.alive) return;
+    e.alive = false;
+
+    addPoints(POINTS_PER_HIT);
+    bleep(740, 0.04, "square", 0.75);
+
+    const r = e.el.getBoundingClientRect();
+    shatterAt(r.left + r.width / 2, r.top + r.height / 2, 22);
+
+    e.el.classList.add("hit");
+    setTimeout(() => {
+      try { e.el.remove(); } catch {}
+      ents = ents.filter((x) => x !== e);
+      scheduleRespawn();
+    }, 260);
+  }
+
+  function despawnEnt(e) {
+    if (!e.alive) return;
+    e.alive = false;
+
+    const r = e.el.getBoundingClientRect();
+    shatterAt(r.left + r.width / 2, r.top + r.height / 2, 18);
+
+    try { e.el.remove(); } catch {}
+    ents = ents.filter((x) => x !== e);
+
+    scheduleRespawn();
+  }
+
+  function enforceNoCollisions() {
+    const blocks = protectedRects();
+    for (const e of [...ents]) {
+      if (!e.alive) continue;
+      const rr = candidateRect(e.x, e.y);
+      if (blocks.some((b) => intersects(rr, b))) despawnEnt(e);
+    }
+  }
+
+  // Spawn as many as possible immediately up to the goal
+  function fillToGoal() {
+    while (aliveCount() < targetGoal) {
+      const p = pickSpawnPoint();
+      if (!p) break;
+
+      const el = document.createElement("button");
+      el.type = "button";
+      el.className = "game-target";
+      el.textContent = "";
+      el.setAttribute("aria-label", "Target");
+      layer.appendChild(el);
+
+      const ent = { el, alive: true, x: p.x, y: p.y, vx: 0, vy: 0, w: SIZE, h: SIZE };
+      if (arcadeMode) giveVelocity(ent);
+
+      setPos(ent);
+      el.addEventListener("click", () => hit(ent), { passive: true });
+      ents.push(ent);
+    }
+  }
+
+  function scheduleRespawn() {
+    if (respawnTimer) return;
+    respawnTimer = requestAnimationFrame(() => {
+      respawnTimer = null;
+      enforceNoCollisions();
+      fillToGoal();
+    });
+  }
+
+  function spawnInitialWave() {
+    stop();
+    ents = [];
+    layer.innerHTML = "";
+
+    targetGoal = randInt(MIN, MAX);
+
+    fillToGoal();
+    enforceNoCollisions();
+    fillToGoal();
+
+    if (arcadeMode) start();
+  }
+
+  function tick(t) {
+    const dt = Math.min(0.033, (t - last) / 1000);
+    last = t;
+
+    if (!arcadeMode) return;
+
+    const bounds = worldBounds();
+    const blocks = protectedRects();
+
+    for (const e of [...ents]) {
+      if (!e.alive) continue;
+
+      e.x += e.vx * dt;
+      e.y += e.vy * dt;
+
+      if (e.x <= bounds.l) { e.x = bounds.l; e.vx *= -1; }
+      if (e.y <= bounds.t) { e.y = bounds.t; e.vy *= -1; }
+      if (e.x + e.w >= bounds.r) { e.x = bounds.r - e.w; e.vx *= -1; }
+      if (e.y + e.h >= bounds.b) { e.y = bounds.b - e.h; e.vy *= -1; }
+
+      const rr = candidateRect(e.x, e.y);
+      if (blocks.some((b) => intersects(rr, b))) {
+        despawnEnt(e);
+        continue;
+      }
+
+      setPos(e);
+    }
+
+    raf = requestAnimationFrame(tick);
+  }
+
+  // priority hit handler
   document.addEventListener("pointerdown", (e) => {
     const el = e.target instanceof Element ? e.target : null;
     if (el && el.closest(".topbar, footer, a, button:not(.game-target):not(.target), .btn, .card, .card *, input, textarea, select")) return;
@@ -825,23 +912,25 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
     e.stopPropagation();
   }, { capture: true, passive: false });
 
-  // Re-clamp positions on resize
-  window.addEventListener("resize", () => {
-    const bounds = worldBounds();
-    ents.forEach((e) => {
-      if (!e.alive) return;
-      e.x = clamp(e.x, bounds.l, bounds.r - e.w);
-      e.y = clamp(e.y, bounds.t, bounds.b - e.h);
-      setPos(e);
+  let enforceRAF = null;
+  function scheduleEnforce() {
+    if (enforceRAF) return;
+    enforceRAF = requestAnimationFrame(() => {
+      enforceRAF = null;
+      enforceNoCollisions();
+      scheduleRespawn();
     });
-  }, { passive: true });
+  }
 
-  // IMPORTANT: keep arcadeMode in sync when the button changes root.dataset.arcade
+  window.addEventListener("scroll", scheduleEnforce, { passive: true });
+  window.addEventListener("resize", scheduleEnforce, { passive: true });
+
+  // arcade toggle listener
   const mo = new MutationObserver(() => {
     arcadeMode = root.dataset.arcade === "1";
+    applyMusicState();
 
     if (arcadeMode) {
-      // give velocities to any live stationary targets
       ents.forEach((e) => {
         if (!e.alive) return;
         if (e.vx === 0 && e.vy === 0) giveVelocity(e);
@@ -851,8 +940,20 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
       stop();
       ents.forEach((e) => { e.vx = 0; e.vy = 0; setPos(e); });
     }
+
+    scheduleEnforce();
   });
   mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-arcade"] });
 
-  spawnWave();
+  // Kick off
+  spawnInitialWave();
+
+  // One reliable "post-load settle" pass (boot fade + mobile URL bar)
+  window.addEventListener("load", () => {
+    setTimeout(scheduleEnforce, 950);
+  }, { once: true });
+
+  window.visualViewport?.addEventListener("resize", scheduleEnforce, { passive: true });
+  window.visualViewport?.addEventListener("scroll", scheduleEnforce, { passive: true });
+  window.addEventListener("orientationchange", () => setTimeout(scheduleEnforce, 250), { passive: true });
 })();
