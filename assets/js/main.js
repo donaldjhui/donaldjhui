@@ -27,6 +27,7 @@
   window.addEventListener("pageshow", (e) => { if (e.persisted) forceTop(); });
 })();
 
+const isMobile = window.innerWidth < 768;
 const root = document.documentElement;
 
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
@@ -48,21 +49,32 @@ const toastHost = document.getElementById("toast");
 /* ---------- Storage keys ---------- */
 const LS_SFX_ON = "sfxOn";
 const LS_MUSIC_ON = "musicOn";
+const LS_ARCADE_ON = "arcadeOn";
 const LS_ACH = "achievements_v3";
 const LS_MILESTONE = "points_milestone_v1";
 
-/* ---------- State ---------- */
-/* Arcade OFF by default (not persisted) */
-let arcadeMode = false;
-root.dataset.arcade = "0";
+// Load last saved settings or use defaults
+let arcadeMode = (lsGet(LS_ARCADE_ON) ?? "0") === "1"; // default OFF
+let sfxOn = (lsGet(LS_SFX_ON) ?? "1") === "1";         // default ON
+let musicOn = (lsGet(LS_MUSIC_ON) ?? "0") === "1";     // default OFF
 
 /* FX always HIGH */
 let fxHigh = true;
+
+// Apply initial state to DOM
+root.dataset.arcade = arcadeMode ? "1" : "0";
 root.dataset.fx = "1";
 
-/* Persist SFX + Music */
-let sfxOn = (lsGet(LS_SFX_ON) ?? "1") === "1";
-let musicOn = (lsGet(LS_MUSIC_ON) ?? "0") === "1";
+/* ---------- Preload breaking audio ---------- */
+const breakAudio = new Audio("./assets/audio/effect_break.mp3");
+
+/* ---------- Play breaking audio ---------- */
+function playBreakAudio() {
+  if (!sfxOn) return;
+  const audio = breakAudio.cloneNode();
+  audio.volume = 0.15;
+  audio.play().catch(() => { });
+}
 
 /* ---------- Toasts / Achievements ---------- */
 function toast(title, msg) {
@@ -75,7 +87,7 @@ function toast(title, msg) {
     <div class="bar"><i></i></div>
   `;
   toastHost.prepend(el);
-  setTimeout(() => el.remove(), 3400);
+  setTimeout(() => el.remove(), 5000);
 }
 
 let achievedArr = [];
@@ -106,6 +118,46 @@ const QUOTES = [
   "Strong systems beat strong feelings. Keep executing.",
   "Today’s effort is tomorrow’s advantage.",
   "You showed up. That’s what pros do.",
+  "Discipline beats motivation every time.",
+  "You don’t need more time — you need more focus.",
+  "Small progress is still progress.",
+  "Consistency turns average into excellence.",
+  "The work you avoid is the life you want.",
+  "Stay focused — results are coming.",
+  "Effort today pays off tomorrow.",
+  "You’re closer than you think.",
+  "Do it tired. Do it unmotivated. Just do it.",
+  "Winners are just people who didn’t quit.",
+  "You didn’t come this far to only come this far.",
+  "Future you is watching. Don’t embarrass them.",
+  "You can do hard things… unfortunately.",
+  "No one’s coming to save you. That’s the good news.",
+  "You vs you. Try not to lose.",
+  "Get up. The grind won’t grind itself.",
+  "Be disciplined… or be disappointed.",
+  "If it was easy, you’d already be bored.",
+  "Do it for the version of you that’s tired of this.",
+  "Progress is progress, even if it’s ugly.",
+  "Comfort is expensive. Growth is cheaper.",
+  "You’re not stuck — you’re just not moving.",
+  "Excuses don’t build results.",
+  "You know what to do. Now do it.",
+  "Stop negotiating with yourself.",
+  "Average is crowded. Leave.",
+  "You’re capable — act like it.",
+  "The only shortcut is discipline.",
+  "No pressure, but your future depends on this.",
+  "Lock in or fall behind.",
+  "XP doesn’t earn itself.",
+  "You just leveled up. Don’t log off now.",
+  "Grind now, flex later.",
+  "Skill issue? Fix it.",
+  "You missed 100% of the shots you didn’t take.",
+  "Respawn. Try again. Win.",
+  "You’re in the build phase. Keep going.",
+  "Main character energy only.",
+  "Achievement unlocked: Still going.",
+  "Pause is not quit.",
 ];
 
 let lastMilestone = 0;
@@ -236,7 +288,7 @@ function ensureAudio() {
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   return audioCtx;
 }
-const SFX_BASE_GAIN = 0.13;
+const SFX_BASE_GAIN = 0.15;
 
 function bleep(freq = 660, dur = 0.05, type = "sine", gainMult = 1) {
   if (!sfxOn) return;
@@ -262,7 +314,7 @@ function bleep(freq = 660, dur = 0.05, type = "sine", gainMult = 1) {
 const bgmAmbient = document.getElementById("bgmAmbient");
 const bgmArcade = document.getElementById("bgmArcade");
 let bgmUnlocked = false;
-const MUSIC_VOL = 0.16;
+const MUSIC_VOL = 0.15;
 
 function applyMusicState() {
   if (!musicOn) {
@@ -348,8 +400,10 @@ document.addEventListener("visibilitychange", () => {
 
   syncToggleUI();
 
+  // When the user toggles arcade mode:
   arcadeBtn?.addEventListener("click", () => {
     arcadeMode = !arcadeMode;
+    lsSet(LS_ARCADE_ON, arcadeMode ? "1" : "0");
     syncToggleUI();
     unlock("arcade", "Arcade Mode", arcadeMode ? "Enabled." : "Disabled.");
     bleep(520, 0.05, "sawtooth", 0.8);
@@ -445,8 +499,8 @@ function shatterAt(x, y, count = 18) {
 
     s.animate(
       [
-        { transform: "translate(-50%, -50%) scale(1)", opacity: 1, filter: "blur(0px)" },
-        { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) rotate(${rot}) scale(.75)`, opacity: 0, filter: "blur(.2px)" }
+        { transform: "translate(-50%, -50%) scale(1)", opacity: 1, filter: isMobile ? "none" : "blur(0px)" },
+        { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) rotate(${rot}) scale(.75)`, opacity: 0, filter: isMobile ? "none" : "blur(.2px)" }
       ],
       { duration: 520 + Math.random() * 320, easing: "cubic-bezier(.2,.9,.2,1)", fill: "forwards" }
     );
@@ -631,10 +685,18 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
 
 /* ---------- Game Targets (despawn-on-collision, INSTANT respawn when space exists) ---------- */
 (() => {
+
+  let cachedBlocks = [];
+  let blocksDirty = true;
+
+  const FPS = isMobile ? 30 : 60;
+  const interval = 1000 / FPS;
+  let lastFrameTime = 0;
   const layer = document.getElementById("gameLayer");
   if (!layer) return;
 
-  const MIN = 5, MAX = 10;
+  const MIN = isMobile ? 3 : 5;
+  const MAX = isMobile ? 5 : 10;
   const POINTS_PER_HIT = 100;
   const SIZE = 54;
   const PAD = 10;
@@ -757,7 +819,8 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
   function setPos(e) { e.el.style.transform = `translate(${e.x}px, ${e.y}px)`; }
 
   function giveVelocity(ent) {
-    const speed = 180 + Math.random() * 140;
+    const baseSpeed = isMobile ? 120 : 180;
+    const speed = baseSpeed + Math.random() * (isMobile ? 80 : 140);
     const ang = Math.random() * Math.PI * 2;
     ent.vx = Math.cos(ang) * speed;
     ent.vy = Math.sin(ang) * speed;
@@ -778,19 +841,68 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
     return ents.filter((e) => e.alive).length;
   }
 
+  const bullseyes = document.querySelectorAll('.target.main-target .bullseye, .target.subtarget .bullseye');
+
+  bullseyes.forEach(bull => {
+    bull.addEventListener('click', e => {
+      const btn = bull.closest('.target');
+
+      // If it's the resume preview button, toggle preview
+      if (btn?.dataset.action === "resumeExpand") {
+        playBreakAudio();
+        toggleResumePreview(btn);
+
+        // Add section unlock points
+        addPoints(250);
+        unlock(
+          "target_resume", // unique key
+          "Section Opened",
+          `+250 points — Resume preview`
+        )
+
+      } else {
+        const tile = bull.closest('.tile');
+        if (tile) {
+          tile.classList.remove('locked');
+          tile.classList.add('unlocked');
+
+          // Play break audio
+          playBreakAudio();
+
+          // Add section unlock points
+          addPoints(250);
+          unlock(
+            "target_resume", // unique key
+            "Section Opened",
+            `+250 points — Resume preview`
+          )
+
+          // Optional visual feedback
+          bull.style.transform = 'scale(0.7)';
+          bull.style.opacity = '0';
+          setTimeout(() => bull.style.display = 'none', 250);
+        }
+      }
+
+      e.stopPropagation(); // prevent bubbling
+    });
+  });
+
   function hit(e) {
     if (!e.alive) return;
     e.alive = false;
 
     addPoints(POINTS_PER_HIT);
-    bleep(740, 0.04, "square", 0.75);
 
     const r = e.el.getBoundingClientRect();
-    shatterAt(r.left + r.width / 2, r.top + r.height / 2, 22);
+    shatterAt(r.left + r.width / 2, r.top + r.height / 2, isMobile ? 8 : 22);
+
+    // Play break audio
+    playBreakAudio();
 
     e.el.classList.add("hit");
     setTimeout(() => {
-      try { e.el.remove(); } catch {}
+      try { e.el.remove(); } catch { }
       ents = ents.filter((x) => x !== e);
       scheduleRespawn();
     }, 260);
@@ -801,9 +913,9 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
     e.alive = false;
 
     const r = e.el.getBoundingClientRect();
-    shatterAt(r.left + r.width / 2, r.top + r.height / 2, 18);
+    shatterAt(r.left + r.width / 2, r.top + r.height / 2, isMobile ? 6 : 18);
 
-    try { e.el.remove(); } catch {}
+    try { e.el.remove(); } catch { }
     ents = ents.filter((x) => x !== e);
 
     scheduleRespawn();
@@ -811,7 +923,7 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
 
   function enforceNoCollisions() {
     const blocks = protectedRects();
-    for (const e of [...ents]) {
+    for (const e of ents) {
       if (!e.alive) continue;
       const rr = candidateRect(e.x, e.y);
       if (blocks.some((b) => intersects(rr, b))) despawnEnt(e);
@@ -863,16 +975,33 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
     if (arcadeMode) start();
   }
 
+  let frameCount = 0;
+
   function tick(t) {
+    if (t - lastFrameTime < interval) {
+      raf = requestAnimationFrame(tick);
+      return;
+    }
+    lastFrameTime = t;
+
     const dt = Math.min(0.033, (t - last) / 1000);
     last = t;
 
     if (!arcadeMode) return;
 
-    const bounds = worldBounds();
-    const blocks = protectedRects();
+    frameCount++; // ✅ count frames
 
-    for (const e of [...ents]) {
+    const bounds = worldBounds();
+
+    // ✅ Only calculate collisions every 3 frames (huge performance win)
+    if (frameCount % 3 === 0 || blocksDirty) {
+      cachedBlocks = protectedRects();
+      blocksDirty = false;
+    }
+
+    const blocks = cachedBlocks;
+
+    for (const e of ents) {
       if (!e.alive) continue;
 
       e.x += e.vx * dt;
@@ -883,10 +1012,13 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
       if (e.x + e.w >= bounds.r) { e.x = bounds.r - e.w; e.vx *= -1; }
       if (e.y + e.h >= bounds.b) { e.y = bounds.b - e.h; e.vy *= -1; }
 
-      const rr = candidateRect(e.x, e.y);
-      if (blocks.some((b) => intersects(rr, b))) {
-        despawnEnt(e);
-        continue;
+      // ✅ Only check collision when blocks exist
+      if (blocks.length) {
+        const rr = candidateRect(e.x, e.y);
+        if (blocks.some((b) => intersects(rr, b))) {
+          despawnEnt(e);
+          continue;
+        }
       }
 
       setPos(e);
@@ -917,13 +1049,19 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
     if (enforceRAF) return;
     enforceRAF = requestAnimationFrame(() => {
       enforceRAF = null;
+      blocksDirty = true; // ✅ ADD THIS
       enforceNoCollisions();
       scheduleRespawn();
     });
   }
 
-  window.addEventListener("scroll", scheduleEnforce, { passive: true });
-  window.addEventListener("resize", scheduleEnforce, { passive: true });
+  const onLayoutChange = () => {
+    blocksDirty = true;
+    scheduleEnforce();
+  };
+
+  window.addEventListener("scroll", onLayoutChange, { passive: true });
+  window.addEventListener("resize", onLayoutChange, { passive: true });
 
   // arcade toggle listener
   const mo = new MutationObserver(() => {
