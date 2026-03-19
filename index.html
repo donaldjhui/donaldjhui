@@ -52,6 +52,15 @@
   <!-- Topbar -->
   <header class="topbar" id="siteTopbar">
     <div class="container topbar-inner">
+      <details id="navMenu" class="nav-menu">
+        <summary class="toggle icon-btn nav-summary" aria-label="Open navigation">
+          <span aria-hidden="true">☰</span>
+        </summary>
+
+        <div class="nav-panel" role="navigation" aria-label="Site navigation">
+          <!-- JS populates -->
+        </div>
+      </details>
       <a class="brand" href="#summary" aria-label="Home">
         <img class="avatar" src="./assets/img/Me.jpg" alt="Donald Hui" />
         <div class="brand-title">
@@ -77,7 +86,6 @@
             <div class="settings-panel" role="group" aria-label="Settings">
               <button class="toggle" id="sfxToggle" type="button" aria-pressed="false">SFX: ON</button>
               <button class="toggle" id="musicToggle" type="button" aria-pressed="false">MUSIC: OFF</button>
-              <button class="toggle" id="fxToggle" type="button" aria-pressed="false">FX: LOW</button>
               <button class="toggle primary" id="arcadeToggle" type="button" aria-pressed="false">ARCADE: OFF</button>
             </div>
           </details>
@@ -105,21 +113,12 @@
             </div>
 
             <p class="subtitle">
-              Enterprise IT field services experience across healthcare and biotech. I focus on deployments,
-              troubleshooting,
-              patching, and delivering smooth end-user experiences—supported by a strong software engineering
-              background.
+              Field Service Technician with enterprise IT experience in healthcare and biotech. I specialize in
+              deployments,
+              troubleshooting, patching, and reliable end‑user support—bringing a software background that helps me
+              automate,
+              document, and improve workflows.
             </p>
-
-            <div class="cta">
-              <a class="btn primary" href="./assets/docs/Donald_Hui_Resume.pdf" target="_blank" rel="noopener">View
-                Resume</a>
-              <a class="btn" href="#projects">Explore Projects</a>
-              <a class="btn ghost" href="https://github.com/donaldjhui" target="_blank" rel="noopener">GitHub</a>
-              <a class="btn ghost" href="https://linkedin.com/in/donald-hui/" target="_blank"
-                rel="noopener">LinkedIn</a>
-              <a class="btn ghost" href="mailto:donaldjhui@gmail.com">Email</a>
-            </div>
           </div>
         </section>
 
@@ -138,21 +137,13 @@
                 <p class="tagline">profile.read()</p>
               </div>
               <p class="p">
-              <p class="p">
-              <p class="p">
-              <p class="p">
-                I’m a University of California, Santa Cruz (Class of 2020) graduate with a B.S. in Computer Science. My
-                background
-                combines hands-on enterprise IT field support with software engineering experience, giving me a strong
-                foundation in
-                systems, networking fundamentals, and building practical tools and documentation that support scalable
-                operations.
-                Outside of work, I’ve played piano since age five and enjoy weight training and bouldering, balanced
-                with gaming in my
-                downtime.
-              </p>
-              </p>
-              </p>
+                I’m a UC Santa Cruz (Class of 2020) Computer Science graduate with a mix of hands‑on enterprise IT
+                support and
+                software engineering experience. I work best in fast-paced environments where clear communication,
+                strong
+                troubleshooting, and clean documentation matter. Outside of work, I’ve played piano since age five and
+                enjoy
+                weight training and bouldering.
               </p>
             </div>
           </div>
@@ -173,6 +164,9 @@
                 <p class="tagline">projects.load()</p>
               </div>
 
+              <p class="p" style="margin-bottom:14px;">
+                Selected work and links—showing how I approach tooling, automation, and practical problem‑solving.
+              </p>
               <div class="grid">
                 <article class="card" data-href="https://github.com/donaldjhui">
                   <h3>GitHub Portfolio</h3>
@@ -212,15 +206,18 @@
                 <span class="target-sub">Shoot to expand</span>
               </button>
 
-              <div class="resume-preview" id="resumePreviewWrap">
-                <object class="resume-object" data="./assets/docs/Donald_Hui_Resume.pdf" type="application/pdf"
-                  aria-label="Resume preview">
-                  <p class="p">
-                    PDF preview not supported in this browser.
-                    <a href="./assets/docs/Donald_Hui_Resume.pdf" target="_blank" rel="noopener"
-                      style="text-decoration: underline;">Open the PDF</a>.
-                  </p>
-                </object>
+              <div class="resume-preview expanded" id="resumePreviewWrap">
+                <iframe class="resume-object" src="./assets/docs/Donald_Hui_Resume.pdf#view=FitH" title="Resume preview"
+                  loading="lazy">
+                </iframe>
+
+                <p class="p" style="margin-top:10px;">
+                  If the preview doesn’t load on your device,
+                  <a href="./assets/docs/Donald_Hui_Resume.pdf" target="_blank" rel="noopener"
+                    style="text-decoration: underline;">
+                    open the PDF
+                  </a>.
+                </p>
               </div>
             </div>
           </div>
@@ -242,8 +239,15 @@
               </div>
 
               <p class="p">
-                Email:
+                Best way to reach me:
                 <a href="mailto:donaldjhui@gmail.com" style="text-decoration: underline;">donaldjhui@gmail.com</a>
+              </p>
+              <p class="p" style="margin-top:10px;">
+                LinkedIn:
+                <a href="https://linkedin.com/in/donald-hui/" target="_blank" rel="noopener"
+                  style="text-decoration: underline;">
+                  linkedin.com/in/donald-hui
+                </a>
               </p>
 
               <div class="cta" style="margin-top: 14px;">
@@ -265,9 +269,6 @@
       </div>
     </footer>
   </main>
-
-  <!-- HUD Targets (navigation only) -->
-  <div id="targetsHud" class="targets-hud" aria-label="Targets HUD"></div>
 
   <!-- Game Targets (shooting only) -->
   <div id="gameLayer" class="game-layer" aria-hidden="true"></div>
