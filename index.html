@@ -65,7 +65,7 @@
         <img class="avatar" src="./assets/img/Me.jpg" alt="Donald Hui" />
         <div class="brand-title">
           <strong>Donald Hui</strong>
-          <span>Field Service Technician</span>
+          <span>Field Services Technician</span>
         </div>
       </a>
 
@@ -85,8 +85,8 @@
 
             <div class="settings-panel" role="group" aria-label="Settings">
               <button class="toggle" id="sfxToggle" type="button" aria-pressed="false">SFX: ON</button>
-              <button class="toggle" id="musicToggle" type="button" aria-pressed="false">MUSIC: OFF</button>
-              <button class="toggle primary" id="arcadeToggle" type="button" aria-pressed="false">ARCADE: OFF</button>
+              <button class="toggle" id="musicToggle" type="button" aria-pressed="false">MUSIC: ON</button>
+              <button class="toggle primary" id="arcadeToggle" type="button" aria-pressed="false">ARCADE: ON</button>
             </div>
           </details>
         </div>
@@ -126,7 +126,10 @@
         <section id="about" class="tile section-card reveal locked" style="grid-column: span 12;"
           data-subject="Profile">
           <button class="target main-target" type="button" aria-controls="aboutPanel" aria-expanded="false">
+            <span class="bullseye"></span>
             <span class="target-label">PROFILE</span>
+            <br></br>
+            <br></br>
             <span class="target-sub">Shoot to reveal</span>
           </button>
 
@@ -153,7 +156,10 @@
         <section id="projects" class="tile section-card reveal locked" style="grid-column: span 12;"
           data-subject="Projects">
           <button class="target main-target" type="button" aria-controls="projectsPanel" aria-expanded="false">
+            <span class="bullseye"></span>
             <span class="target-label">PROJECTS</span>
+            <br></br>
+            <br></br>
             <span class="target-sub">Shoot to reveal</span>
           </button>
 
@@ -189,7 +195,10 @@
         <section id="resume" class="tile section-card reveal locked" style="grid-column: span 12;"
           data-subject="Resume">
           <button class="target main-target" type="button" aria-controls="resumePanel" aria-expanded="false">
+            <span class="bullseye"></span>
             <span class="target-label">RESUME</span>
+            <br></br>
+            <br></br>
             <span class="target-sub">Shoot to reveal</span>
           </button>
 
@@ -200,10 +209,13 @@
                 <p class="tagline">resume.open()</p>
               </div>
 
-              <button class="target subtarget" type="button" aria-controls="resumePreviewWrap" aria-expanded="false"
-                data-action="resumeExpand">
+              <button class="target subtarget preview" type="button" aria-controls="resumePreviewWrap"
+                aria-expanded="true" data-action="resumeExpand">
+                <span class="bullseye"></span>
                 <span class="target-label">PREVIEW</span>
-                <span class="target-sub">Shoot to expand</span>
+                <br></br>
+                <br></br>
+                <span class="target-sub">Shoot to collapse</span>
               </button>
 
               <div class="resume-preview expanded" id="resumePreviewWrap">
@@ -227,7 +239,10 @@
         <section id="contact" class="tile section-card reveal locked" style="grid-column: span 12;"
           data-subject="Contact">
           <button class="target main-target" type="button" aria-controls="contactPanel" aria-expanded="false">
+            <span class="bullseye"></span>
             <span class="target-label">CONTACT</span>
+            <br></br>
+            <br></br>
             <span class="target-sub">Shoot to reveal</span>
           </button>
 
