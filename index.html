@@ -1,6 +1,5 @@
 <!doctype html>
 <html lang="en">
-
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -13,7 +12,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap"
-    rel="stylesheet" />
+    rel="stylesheet"
+  />
 
   <link rel="stylesheet" href="./assets/css/styles.css" />
 </head>
@@ -56,11 +56,11 @@
         <summary class="toggle icon-btn nav-summary" aria-label="Open navigation">
           <span aria-hidden="true">☰</span>
         </summary>
-
         <div class="nav-panel" role="navigation" aria-label="Site navigation">
           <!-- JS populates -->
         </div>
       </details>
+
       <a class="brand" href="#summary" aria-label="Home">
         <img class="avatar" src="./assets/img/Me.jpg" alt="Donald Hui" />
         <div class="brand-title">
@@ -97,7 +97,6 @@
   <main>
     <section id="summary" class="container hero">
       <div class="bento">
-
         <!-- SUMMARY (always visible) -->
         <section class="tile hero-main reveal unlocked" aria-label="Summary" data-subject="Summary">
           <div class="panel" id="summaryPanel">
@@ -107,29 +106,25 @@
               Fast, reliable support—crafted like a production system.
             </h1>
 
-            <div class="section-head" style="margin-top:14px;">
-              <h2 style="margin:0;">Summary</h2>
+            <div class="section-head" style="margin-top: 14px;">
+              <h2 style="margin: 0;">Summary</h2>
               <p class="tagline">summary.read()</p>
             </div>
 
             <p class="subtitle">
               Field Service Technician with enterprise IT experience in healthcare and biotech. I specialize in
-              deployments,
-              troubleshooting, patching, and reliable end‑user support—bringing a software background that helps me
-              automate,
-              document, and improve workflows.
+              deployments, troubleshooting, patching, and reliable end‑user support—bringing a software background
+              that helps me automate, document, and improve workflows.
             </p>
           </div>
         </section>
 
         <!-- PROFILE -->
-        <section id="about" class="tile section-card reveal locked" style="grid-column: span 12;"
-          data-subject="Profile">
+        <section id="about" class="tile section-card reveal locked" style="grid-column: span 12;" data-subject="Profile">
           <button class="target main-target" type="button" aria-controls="aboutPanel" aria-expanded="false">
             <span class="bullseye"></span>
             <span class="target-label">PROFILE</span>
-            <br></br>
-            <br></br>
+            <br /><br />
             <span class="target-sub">Shoot to reveal</span>
           </button>
 
@@ -141,25 +136,25 @@
               </div>
               <p class="p">
                 I’m a UC Santa Cruz (Class of 2020) Computer Science graduate with a mix of hands‑on enterprise IT
-                support and
-                software engineering experience. I work best in fast-paced environments where clear communication,
-                strong
-                troubleshooting, and clean documentation matter. Outside of work, I’ve played piano since age five and
-                enjoy
-                weight training and bouldering.
+                support and software engineering experience. I work best in fast-paced environments where clear
+                communication, strong troubleshooting, and clean documentation matter. Outside of work, I’ve played
+                piano since age five and enjoy weight training and bouldering.
               </p>
             </div>
           </div>
         </section>
 
         <!-- PROJECTS -->
-        <section id="projects" class="tile section-card reveal locked" style="grid-column: span 12;"
-          data-subject="Projects">
+        <section
+          id="projects"
+          class="tile section-card reveal locked"
+          style="grid-column: span 12;"
+          data-subject="Projects"
+        >
           <button class="target main-target" type="button" aria-controls="projectsPanel" aria-expanded="false">
             <span class="bullseye"></span>
             <span class="target-label">PROJECTS</span>
-            <br></br>
-            <br></br>
+            <br /><br />
             <span class="target-sub">Shoot to reveal</span>
           </button>
 
@@ -170,9 +165,10 @@
                 <p class="tagline">projects.load()</p>
               </div>
 
-              <p class="p" style="margin-bottom:14px;">
+              <p class="p" style="margin-bottom: 14px;">
                 Selected work and links—showing how I approach tooling, automation, and practical problem‑solving.
               </p>
+
               <div class="grid">
                 <article class="card" data-href="https://github.com/donaldjhui">
                   <h3>GitHub Portfolio</h3>
@@ -192,13 +188,11 @@
         </section>
 
         <!-- RESUME -->
-        <section id="resume" class="tile section-card reveal locked" style="grid-column: span 12;"
-          data-subject="Resume">
+        <section id="resume" class="tile section-card reveal locked" style="grid-column: span 12;" data-subject="Resume">
           <button class="target main-target" type="button" aria-controls="resumePanel" aria-expanded="false">
             <span class="bullseye"></span>
             <span class="target-label">RESUME</span>
-            <br></br>
-            <br></br>
+            <br /><br />
             <span class="target-sub">Shoot to reveal</span>
           </button>
 
@@ -209,26 +203,35 @@
                 <p class="tagline">resume.open()</p>
               </div>
 
-              <button class="target subtarget preview" type="button" aria-controls="resumePreviewWrap"
-                aria-expanded="true" data-action="resumeExpand">
+              <button
+                class="target subtarget preview"
+                type="button"
+                aria-controls="resumePreviewWrap"
+                aria-expanded="true"
+                data-action="resumeExpand"
+              >
                 <span class="bullseye"></span>
                 <span class="target-label">PREVIEW</span>
-                <br></br>
-                <br></br>
+                <br /><br />
                 <span class="target-sub">Shoot to collapse</span>
               </button>
 
               <div class="resume-preview expanded" id="resumePreviewWrap">
-                <iframe class="resume-object" src="./assets/docs/Donald_Hui_Resume.pdf#view=FitH" title="Resume preview"
-                  loading="lazy">
-                </iframe>
+                <iframe
+                  class="resume-object"
+                  src="./assets/docs/Donald_Hui_Resume.pdf#view=FitH"
+                  title="Resume preview"
+                  loading="lazy"
+                ></iframe>
 
-                <p class="p" style="margin-top:10px;">
+                <p class="p" style="margin-top: 10px;">
                   If the preview doesn’t load on your device,
-                  <a href="./assets/docs/Donald_Hui_Resume.pdf" target="_blank" rel="noopener"
-                    style="text-decoration: underline;">
-                    open the PDF
-                  </a>.
+                  <a
+                    href="./assets/docs/Donald_Hui_Resume.pdf"
+                    target="_blank"
+                    rel="noopener"
+                    style="text-decoration: underline;"
+                  >open the PDF</a>.
                 </p>
               </div>
             </div>
@@ -236,13 +239,16 @@
         </section>
 
         <!-- CONTACT -->
-        <section id="contact" class="tile section-card reveal locked" style="grid-column: span 12;"
-          data-subject="Contact">
+        <section
+          id="contact"
+          class="tile section-card reveal locked"
+          style="grid-column: span 12;"
+          data-subject="Contact"
+        >
           <button class="target main-target" type="button" aria-controls="contactPanel" aria-expanded="false">
             <span class="bullseye"></span>
             <span class="target-label">CONTACT</span>
-            <br></br>
-            <br></br>
+            <br /><br />
             <span class="target-sub">Shoot to reveal</span>
           </button>
 
@@ -257,29 +263,30 @@
                 Best way to reach me:
                 <a href="mailto:donaldjhui@gmail.com" style="text-decoration: underline;">donaldjhui@gmail.com</a>
               </p>
-              <p class="p" style="margin-top:10px;">
+
+              <p class="p" style="margin-top: 10px;">
                 LinkedIn:
-                <a href="https://linkedin.com/in/donald-hui/" target="_blank" rel="noopener"
-                  style="text-decoration: underline;">
-                  linkedin.com/in/donald-hui
-                </a>
+                <a
+                  href="https://linkedin.com/in/donald-hui/"
+                  target="_blank"
+                  rel="noopener"
+                  style="text-decoration: underline;"
+                >linkedin.com/in/donald-hui</a>
               </p>
 
               <div class="cta" style="margin-top: 14px;">
                 <a class="btn primary" href="mailto:donaldjhui@gmail.com">Email Me</a>
-                <a class="btn ghost" href="https://linkedin.com/in/donald-hui/" target="_blank"
-                  rel="noopener">LinkedIn</a>
+                <a class="btn ghost" href="https://linkedin.com/in/donald-hui/" target="_blank" rel="noopener">LinkedIn</a>
               </div>
             </div>
           </div>
         </section>
-
       </div>
     </section>
 
     <footer>
       <div class="container">
-        <div style="margin-bottom:6px;">This site is built using HTML, CSS, and JavaScript.</div>
+        <div style="margin-bottom: 6px;">This site is built using HTML, CSS, and JavaScript.</div>
         <div>&copy; <span id="year"></span> Donald Hui. All Rights Reserved.</div>
       </div>
     </footer>
@@ -301,5 +308,4 @@
 
   <script defer src="./assets/js/main.js"></script>
 </body>
-
 </html>
