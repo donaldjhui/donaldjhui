@@ -1,18 +1,16 @@
 /* =========================================================
-   main.js (FULL)
-   - Same behavior on mobile + desktop (responsive layout handled by CSS)
-   - Targets always spawn (if possible) on all devices
-   - Arcade ON: DVD bounce forever / Arcade OFF: targets still
-   - Points reset each page load
-   - Arcade OFF by default each page load
-   - +250 points per section unlock
-   - +100 points per game target hit
-   - every 1000 points: motivational toast
-   - Music works (ambient vs arcade track)
-   - FX always HIGH (no FX toggle)
-   - Targets will NEVER overlap protected text/panels/preview/HUD/settings/toasts:
-       If content scrolls/expands into them, they shatter + respawn.
-       If nowhere valid exists, they despawn (do not spawn).
+   main.js (REFactor - drop-in)
+   - Section unlock: ONE combined toast (+points)
+   - Game target hit: points toast per hit
+   - Arcade targets: real 2D elastic wall bounce (left/right/top/bottom)
+   - Arcade targets: bounce off protected UI blocks (no shatter/despawn)
+   - Mobile perf optimizations:
+       * fewer shards + shorter shard lifetime
+       * fewer targets + lower FPS on mobile
+       * less frequent protected-rect recalcs on mobile
+       * keep RAF alive even when Arcade is OFF
+   - CHANGE: Disable ARCADE MOTION on mobile (fastest/cleanest)
+     (Arcade toggle still affects music + UI label, but targets stay still on mobile.)
 ========================================================= */
 
 (() => {
@@ -27,57 +25,83 @@
   window.addEventListener("pageshow", (e) => { if (e.persisted) forceTop(); });
 })();
 
-const isMobile = window.innerWidth < 768;
 const root = document.documentElement;
+const mqMobile = matchMedia("(max-width: 767px)");
+const isTouchDevice = () =>
+  (navigator.maxTouchPoints || 0) > 0 ||
+  matchMedia("(pointer: coarse)").matches;
+
+// "No space on left/right for targets" (portrait monitors, narrow windows, etc.)
+function noSideSpaceNow() {
+  const vv = window.visualViewport;
+  const w = vv?.width ?? innerWidth;
+  const h = vv?.height ?? innerHeight;
+
+  const TARGET = 54; // keep in sync with game cfg SIZE
+  const PAD = 10;    // keep in sync with game cfg PAD
+  const MIN_GUTTER_EACH_SIDE = 70; // required empty space on both sides
+
+  const portraitLike = h / Math.max(1, w) >= 1.25;
+  const minNeededWidth = (PAD * 2) + TARGET + (MIN_GUTTER_EACH_SIDE * 2);
+
+  return portraitLike || w < minNeededWidth;
+}
+
+// Used everywhere (shards + targets): now includes portrait monitors too
+const isMobileNow = () => mqMobile.matches || isTouchDevice() || noSideSpaceNow();
+
+const $ = (sel, rootEl = document) => rootEl.querySelector(sel);
+const $$ = (sel, rootEl = document) => Array.from(rootEl.querySelectorAll(sel));
 
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
 function lsSet(key, val) { try { localStorage.setItem(key, val); } catch { } }
-function clamp(n, a, b) { return Math.min(b, Math.max(a, n)); }
-function rectOf(el) { const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; }
-function intersects(a, b) { return !(a.r <= b.l || a.l >= b.r || a.b <= b.t || a.t >= b.b); }
-function expandRect(r, m) { return { l: r.l - m, t: r.t - m, r: r.r + m, b: r.b + m }; }
 
-const yearEl = document.getElementById("year");
+function rectOf(el) {
+  const r = el.getBoundingClientRect();
+  return { l: r.left, t: r.top, r: r.right, b: r.bottom };
+}
+function expandRect(r, m) { return { l: r.l - m, t: r.t - m, r: r.r + m, b: r.b + m }; }
+function intersects(a, b) { return !(a.r <= b.l || a.l >= b.r || a.b <= b.t || a.t >= b.b); }
+
+const yearEl = $("#year");
 if (yearEl) yearEl.textContent = String(new Date().getFullYear());
 
-const heroCard = document.querySelector(".hero-main");
-const reticle = document.querySelector(".reticle");
-const muzzle = document.getElementById("muzzle");
-const xpFill = document.getElementById("xpFill");
-const toastHost = document.getElementById("toast");
+const heroCard = $(".hero-main");
+const reticle = $(".reticle");
+const muzzle = $("#muzzle");
+const xpFill = $("#xpFill");
+const toastHost = $("#toast");
 
 /* ---------- Storage keys ---------- */
-const LS_SFX_ON = "sfxOn";
-const LS_MUSIC_ON = "musicOn";
-const LS_ARCADE_ON = "arcadeOn";
-const LS_ACH = "achievements_v3";
-const LS_MILESTONE = "points_milestone_v1";
+const LS = Object.freeze({
+  SFX_ON: "sfxOn",
+  MUSIC_ON: "musicOn",
+  ARCADE_ON: "arcadeOn",
+  ACH: "achievements_v3",
+  MILESTONE: "points_milestone_v1",
+});
 
-// Load last saved settings or use defaults
-let arcadeMode = (lsGet(LS_ARCADE_ON) ?? "0") === "1"; // default OFF
-let sfxOn = (lsGet(LS_SFX_ON) ?? "1") === "1";         // default ON
-let musicOn = (lsGet(LS_MUSIC_ON) ?? "0") === "1";     // default OFF
+let arcadeMode = (lsGet(LS.ARCADE_ON) ?? "0") === "1"; // default OFF
+let sfxOn = (lsGet(LS.SFX_ON) ?? "1") === "1";         // default ON
+let musicOn = (lsGet(LS.MUSIC_ON) ?? "0") === "1";     // default OFF
 
 /* FX always HIGH */
-let fxHigh = true;
+const fxHigh = true;
 
-// Apply initial state to DOM
 root.dataset.arcade = arcadeMode ? "1" : "0";
 root.dataset.fx = "1";
 
-/* ---------- Preload breaking audio ---------- */
+/* ---------- Break audio ---------- */
 const breakAudio = new Audio("./assets/audio/effect_break.mp3");
-
-/* ---------- Play breaking audio ---------- */
 function playBreakAudio() {
   if (!sfxOn) return;
-  const audio = breakAudio.cloneNode();
-  audio.volume = 0.15;
-  audio.play().catch(() => { });
+  const a = breakAudio.cloneNode();
+  a.volume = 0.15;
+  a.play().catch(() => { });
 }
 
 /* ---------- Toasts / Achievements ---------- */
-function toast(title, msg) {
+function toast(title, msg, { ms = 5000 } = {}) {
   if (!toastHost) return;
   const el = document.createElement("div");
   el.className = "t";
@@ -87,26 +111,26 @@ function toast(title, msg) {
     <div class="bar"><i></i></div>
   `;
   toastHost.prepend(el);
-  setTimeout(() => el.remove(), 5000);
+  setTimeout(() => el.remove(), ms);
 }
 
 let achievedArr = [];
-try { achievedArr = JSON.parse(lsGet(LS_ACH) || "[]"); } catch { achievedArr = []; }
+try { achievedArr = JSON.parse(lsGet(LS.ACH) || "[]"); } catch { achievedArr = []; }
 const achieved = new Set(achievedArr);
 
-function unlock(key, title, msg) {
-  if (achieved.has(key)) return;
+function unlock(key, title, msg, { silent = false } = {}) {
+  if (achieved.has(key)) return false;
   achieved.add(key);
-  lsSet(LS_ACH, JSON.stringify([...achieved]));
-  toast("ACHIEVEMENT UNLOCKED", `${title} — ${msg}`);
+  lsSet(LS.ACH, JSON.stringify([...achieved]));
+  if (!silent) toast("ACHIEVEMENT UNLOCKED", `${title} — ${msg}`);
+  return true;
 }
 
 /* ---------- Points (reset every load) ---------- */
 let points = 0;
-const pointsEl = document.getElementById("pointsValue");
+const pointsEl = $("#pointsValue");
 function renderPoints() { if (pointsEl) pointsEl.textContent = String(points); }
 
-/* Motivational quotes every 1000 points */
 const QUOTES = [
   "Keep going — consistency beats intensity.",
   "You’re building momentum. Stay with it.",
@@ -161,17 +185,17 @@ const QUOTES = [
 ];
 
 let lastMilestone = 0;
-(() => {
-  const saved = parseInt(lsGet(LS_MILESTONE) || "0", 10);
+{
+  const saved = parseInt(lsGet(LS.MILESTONE) || "0", 10);
   lastMilestone = Number.isFinite(saved) ? saved : 0;
-})();
+}
 
 function checkPointMilestone() {
   const milestone = Math.floor(points / 1000) * 1000;
   if (milestone >= 1000 && milestone > lastMilestone) {
     lastMilestone = milestone;
-    lsSet(LS_MILESTONE, String(lastMilestone));
-    const quote = QUOTES[Math.floor(Math.random() * QUOTES.length)];
+    lsSet(LS.MILESTONE, String(lastMilestone));
+    const quote = QUOTES[(Math.random() * QUOTES.length) | 0];
     toast("MILESTONE", `${milestone} points — ${quote}`);
   }
 }
@@ -182,18 +206,20 @@ function addPoints(n) {
   checkPointMilestone();
 }
 
+function awardPoints(amount, title = "POINTS", msg = "", { toastMs = 5000 } = {}) {
+  addPoints(amount);
+  toast(title, msg ? `${msg} — +${amount} points` : `+${amount} points`, { ms: toastMs });
+}
+
 function resetPoints() {
   points = 0;
   renderPoints();
   lastMilestone = 0;
-  lsSet(LS_MILESTONE, "0");
+  lsSet(LS.MILESTONE, "0");
 }
 
-/* Reset every page load */
 resetPoints();
-
-/* Reset button (resets current session points) */
-document.getElementById("pointsResetBtn")?.addEventListener("click", resetPoints);
+$("#pointsResetBtn")?.addEventListener("click", resetPoints);
 
 /* ---------- XP bar ---------- */
 function updateXP() {
@@ -253,7 +279,7 @@ window.addEventListener("pointermove", (e) => {
       <rect width="100%" height="100%" filter="url(#n)"/>
     </svg>`;
   const url = "data:image/svg+xml;utf8," + encodeURIComponent(svg);
-  const noiseEl = document.querySelector(".noise");
+  const noiseEl = $(".noise");
   if (noiseEl) noiseEl.style.backgroundImage = `url("${url}")`;
 })();
 
@@ -263,25 +289,25 @@ window.addEventListener("pointermove", (e) => {
     for (const e of entries) if (e.isIntersecting) e.target.classList.add("in");
   }, { threshold: 0.12 });
 
-  document.querySelectorAll(".reveal").forEach((el) => { try { io.observe(el); } catch { } });
+  $$(".reveal").forEach((el) => { try { io.observe(el); } catch { } });
 })();
 
 /* ---------- Boot overlay ---------- */
 (() => {
-  const boot = document.getElementById("boot");
+  const boot = $("#boot");
   if (!boot) return;
 
-  function dismiss() {
+  const dismiss = () => {
     boot.classList.add("off");
     setTimeout(() => boot.remove(), 550);
-  }
+  };
 
   window.addEventListener("load", () => setTimeout(dismiss, 900));
   boot.addEventListener("pointerdown", dismiss, { passive: true });
   window.addEventListener("keydown", dismiss, { once: true });
 })();
 
-/* ---------- SFX ---------- */
+/* ---------- SFX (bleeps) ---------- */
 let audioCtx = null;
 function ensureAudio() {
   if (audioCtx) return audioCtx;
@@ -294,6 +320,7 @@ function bleep(freq = 660, dur = 0.05, type = "sine", gainMult = 1) {
   if (!sfxOn) return;
   const ctx = ensureAudio();
   const t0 = ctx.currentTime;
+
   const o = ctx.createOscillator();
   const g = ctx.createGain();
 
@@ -311,8 +338,8 @@ function bleep(freq = 660, dur = 0.05, type = "sine", gainMult = 1) {
 }
 
 /* ---------- Music engine ---------- */
-const bgmAmbient = document.getElementById("bgmAmbient");
-const bgmArcade = document.getElementById("bgmArcade");
+const bgmAmbient = $("#bgmAmbient");
+const bgmArcade = $("#bgmArcade");
 let bgmUnlocked = false;
 const MUSIC_VOL = 0.15;
 
@@ -323,9 +350,8 @@ function applyMusicState() {
     return;
   }
 
-  const wantArcade = arcadeMode;
-  const on = wantArcade ? bgmArcade : bgmAmbient;
-  const off = wantArcade ? bgmAmbient : bgmArcade;
+  const on = arcadeMode ? bgmArcade : bgmAmbient;
+  const off = arcadeMode ? bgmAmbient : bgmArcade;
 
   try { off?.pause(); } catch { }
   if (on) on.volume = MUSIC_VOL;
@@ -352,14 +378,12 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-/* ---------- Settings dropdown: do NOT auto-close on toggle ---------- */
+/* ---------- Settings dropdown ---------- */
 (() => {
-  const settingsMenu = document.getElementById("settingsMenu");
+  const settingsMenu = $("#settingsMenu");
   if (!settingsMenu) return;
 
-  function closeSettings() {
-    if (settingsMenu.open) settingsMenu.open = false;
-  }
+  const closeSettings = () => { if (settingsMenu.open) settingsMenu.open = false; };
 
   document.addEventListener("pointerdown", (e) => {
     if (!settingsMenu.open) return;
@@ -376,9 +400,9 @@ document.addEventListener("visibilitychange", () => {
 
 /* ---------- Settings toggles (NO FX toggle) ---------- */
 (() => {
-  const arcadeBtn = document.getElementById("arcadeToggle");
-  const sfxBtn = document.getElementById("sfxToggle");
-  const musicBtn = document.getElementById("musicToggle");
+  const arcadeBtn = $("#arcadeToggle");
+  const sfxBtn = $("#sfxToggle");
+  const musicBtn = $("#musicToggle");
 
   function syncToggleUI() {
     if (arcadeBtn) {
@@ -393,17 +417,15 @@ document.addEventListener("visibilitychange", () => {
       musicBtn.setAttribute("aria-pressed", musicOn ? "true" : "false");
       musicBtn.textContent = `MUSIC: ${musicOn ? "ON" : "OFF"}`;
     }
-
     root.dataset.arcade = arcadeMode ? "1" : "0";
     root.dataset.fx = "1";
   }
 
   syncToggleUI();
 
-  // When the user toggles arcade mode:
   arcadeBtn?.addEventListener("click", () => {
     arcadeMode = !arcadeMode;
-    lsSet(LS_ARCADE_ON, arcadeMode ? "1" : "0");
+    lsSet(LS.ARCADE_ON, arcadeMode ? "1" : "0");
     syncToggleUI();
     unlock("arcade", "Arcade Mode", arcadeMode ? "Enabled." : "Disabled.");
     bleep(520, 0.05, "sawtooth", 0.8);
@@ -412,7 +434,7 @@ document.addEventListener("visibilitychange", () => {
 
   sfxBtn?.addEventListener("click", () => {
     sfxOn = !sfxOn;
-    lsSet(LS_SFX_ON, sfxOn ? "1" : "0");
+    lsSet(LS.SFX_ON, sfxOn ? "1" : "0");
     syncToggleUI();
     if (sfxOn) {
       ensureAudio();
@@ -423,10 +445,10 @@ document.addEventListener("visibilitychange", () => {
 
   musicBtn?.addEventListener("click", () => {
     musicOn = !musicOn;
-    lsSet(LS_MUSIC_ON, musicOn ? "1" : "0");
+    lsSet(LS.MUSIC_ON, musicOn ? "1" : "0");
     syncToggleUI();
     unlock("music_toggle", "Music", musicOn ? "Enabled." : "Disabled.");
-    bgmUnlocked = true; // gesture
+    bgmUnlocked = true;
     applyMusicState();
   });
 })();
@@ -441,7 +463,7 @@ function muzzleFlash(x, y) {
   muzzle.classList.add("fire");
 }
 
-/* ---------- Shatter effect (DOM shards) ---------- */
+/* ---------- Shatter effect ---------- */
 let shardLayer = null;
 function ensureShardLayer() {
   if (shardLayer) return shardLayer;
@@ -454,9 +476,9 @@ function ensureShardLayer() {
 function shatterAt(x, y, count = 18) {
   const layer = ensureShardLayer();
 
-  function pickColor() {
+  const pickColor = () => {
     const r = Math.random();
-    if (r < 0.70) {
+    if (r < 0.7) {
       const neutrals = [
         "rgba(245,247,250,.95)",
         "rgba(210,218,228,.95)",
@@ -466,10 +488,13 @@ function shatterAt(x, y, count = 18) {
       ];
       return neutrals[(Math.random() * neutrals.length) | 0];
     }
-    if (r < 0.90) return "rgba(245,247,250,.95)";
+    if (r < 0.9) return "rgba(245,247,250,.95)";
     if (r < 0.97) return "rgba(0,229,255,.55)";
     return "rgba(255,43,214,.40)";
-  }
+  };
+
+  const mobile = isMobileNow();
+  const removeAfter = mobile ? 650 : 1000;
 
   for (let i = 0; i < count; i++) {
     const s = document.createElement("i");
@@ -487,9 +512,7 @@ function shatterAt(x, y, count = 18) {
     s.style.background = c;
 
     const isBright = c.includes("245,247,250") || c.includes("210,218,228");
-    s.style.boxShadow = isBright
-      ? "0 0 10px rgba(255,255,255,.22)"
-      : "0 0 8px rgba(0,0,0,.16)";
+    s.style.boxShadow = isBright ? "0 0 10px rgba(255,255,255,.22)" : "0 0 8px rgba(0,0,0,.16)";
 
     const ang = Math.random() * Math.PI * 2;
     const dist = 26 + Math.random() * 90;
@@ -499,30 +522,29 @@ function shatterAt(x, y, count = 18) {
 
     s.animate(
       [
-        { transform: "translate(-50%, -50%) scale(1)", opacity: 1, filter: isMobile ? "none" : "blur(0px)" },
-        { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) rotate(${rot}) scale(.75)`, opacity: 0, filter: isMobile ? "none" : "blur(.2px)" }
+        { transform: "translate(-50%, -50%) scale(1)", opacity: 1, filter: mobile ? "none" : "blur(0px)" },
+        { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) rotate(${rot}) scale(.75)`, opacity: 0, filter: mobile ? "none" : "blur(.2px)" },
       ],
       { duration: 520 + Math.random() * 320, easing: "cubic-bezier(.2,.9,.2,1)", fill: "forwards" }
     );
 
     layer.appendChild(s);
-    setTimeout(() => s.remove(), 1000);
+    setTimeout(() => s.remove(), removeAfter);
   }
 }
 
 /* ---------- Resume click achievement ---------- */
-document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
+$$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
   a.addEventListener("click", () => unlock("resume_open", "Paper Trail", "Opened the resume."), { passive: true });
 });
 
 /* ---------- Tiles: unlock logic (+250 points) ---------- */
 (() => {
-  const tiles = Array.from(document.querySelectorAll(".tile"));
+  const tiles = $$(".tile");
   const SECTION_UNLOCK_POINTS = 250;
 
-  function isPinnedOpen(tile) {
-    return tile?.classList.contains("hero-main") || tile?.dataset.subject === "Summary";
-  }
+  const isPinnedOpen = (tile) =>
+    tile?.classList.contains("hero-main") || tile?.dataset.subject === "Summary";
 
   function setPanelHeights(tile) {
     const panel = tile.querySelector(".panel");
@@ -536,7 +558,7 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
     tile.style.setProperty("--panel-open", h + "px");
   }
 
-  function measureAll() { tiles.forEach(setPanelHeights); }
+  const measureAll = () => tiles.forEach(setPanelHeights);
 
   function unlockFromMainTarget(btn) {
     const tile = btn.closest(".tile");
@@ -552,29 +574,26 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
 
     btn.setAttribute("aria-expanded", "true");
 
-    // If opening Resume, ensure preview starts open
     if (tile.id === "resume") {
-      const wrap = document.getElementById("resumePreviewWrap");
+      const wrap = $("#resumePreviewWrap");
       if (wrap) {
         wrap.classList.add("expanded");
         wrap.classList.remove("collapsed");
       }
-      // force a "collision enforce" cycle in game targets (they listen to scroll)
       window.dispatchEvent(new Event("scroll"));
     }
 
-    addPoints(SECTION_UNLOCK_POINTS);
-    unlock(
-      "target_" + (tile.id || Math.random().toString(16).slice(2)),
-      "Section Opened",
-      `+${SECTION_UNLOCK_POINTS} points — ${tile.dataset.subject || tile.id}`
-    );
+    const subject = tile.dataset.subject || tile.id || "Section";
+    const achKey = "target_" + (tile.id || Math.random().toString(16).slice(2));
+
+    unlock(achKey, "Section Opened", subject, { silent: true });
+    awardPoints(SECTION_UNLOCK_POINTS, "SECTION OPENED", subject);
 
     tile.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function toggleResumePreview(btn) {
-    const wrap = document.getElementById("resumePreviewWrap");
+    const wrap = $("#resumePreviewWrap");
     if (!wrap) return;
 
     const isExpanded = wrap.classList.toggle("expanded");
@@ -585,7 +604,6 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
     const sub = btn.querySelector(".target-sub");
     if (sub) sub.textContent = isExpanded ? "Shoot to collapse" : "Shoot to expand";
 
-    // Trigger collision re-check so targets relocate if preview overlaps them
     window.dispatchEvent(new Event("scroll"));
 
     const tile = btn.closest(".tile");
@@ -594,9 +612,8 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
 
   measureAll();
   window.addEventListener("load", () => { measureAll(); requestAnimationFrame(measureAll); }, { passive: true });
-  window.addEventListener("resize", () => measureAll(), { passive: true });
+  window.addEventListener("resize", measureAll, { passive: true });
 
-  // Click-to-open (works on mobile too)
   document.addEventListener("click", (e) => {
     const btn = e.target instanceof Element ? e.target.closest(".target") : null;
     if (!btn) return;
@@ -605,7 +622,6 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
     if (btn.classList.contains("main-target")) return unlockFromMainTarget(btn);
   }, { passive: true });
 
-  // Desktop shooting also works
   function shootAt(x, y) {
     bleep(180, 0.035, "square", 1.0);
     bleep(90, 0.02, "sine", 0.7);
@@ -627,9 +643,7 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
     const el = e.target instanceof Element ? e.target : null;
     if (!el) return;
 
-    // IMPORTANT: if user is interacting with a target button (like PREVIEW), let the click handler handle it
     if (el.closest(".target")) return;
-
     if (el.closest(".topbar, footer, a, button, .btn, .card, .card *, input, textarea, select")) return;
 
     shootAt(e.clientX, e.clientY);
@@ -642,10 +656,10 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
   });
 })();
 
-/* ---------- Hamburger nav (replaces left HUD) ---------- */
+/* ---------- Hamburger nav ---------- */
 (() => {
-  const navMenu = document.getElementById("navMenu");
-  const panel = document.querySelector("#navMenu .nav-panel");
+  const navMenu = $("#navMenu");
+  const panel = $("#navMenu .nav-panel");
   if (!navMenu || !panel) return;
 
   const items = [
@@ -668,7 +682,6 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
     });
   });
 
-  // close on outside click
   document.addEventListener("pointerdown", (e) => {
     if (!navMenu.open) return;
     const t = e.target instanceof Element ? e.target : null;
@@ -677,42 +690,48 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
     navMenu.open = false;
   }, { capture: true });
 
-  // close on ESC
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape") navMenu.open = false;
   });
 })();
 
-/* ---------- Game Targets (despawn-on-collision, INSTANT respawn when space exists) ---------- */
+/* ---------- Game Targets (Option A: mobile OR no-side-space = no spawn + hide layer) ---------- */
 (() => {
+  const layer = $("#gameLayer");
+  if (!layer) return;
+
+  // "OFF" means: no targets + hide layer (mobile, touch, portrait monitor, narrow layout...)
+  const isOffLayout = () => isMobileNow();
+
+  let offActive = false;
+
+  // ✅ desktop perf cfg
+  const getCfg = () => ({
+    MIN: 5,
+    MAX: 10,
+    FPS: 60,
+    SIZE: 54,
+    PAD: 10,
+    POINTS_PER_HIT: 100,
+  });
+
+  const arcadeMotionEnabled = () => arcadeMode; // when ON layout, arcadeMode controls motion
 
   let cachedBlocks = [];
   let blocksDirty = true;
 
-  const FPS = isMobile ? 30 : 60;
-  const interval = 1000 / FPS;
-  let lastFrameTime = 0;
-  const layer = document.getElementById("gameLayer");
-  if (!layer) return;
-
-  const MIN = isMobile ? 3 : 5;
-  const MAX = isMobile ? 5 : 10;
-  const POINTS_PER_HIT = 100;
-  const SIZE = 54;
-  const PAD = 10;
-
   let ents = [];
   let raf = null;
   let last = 0;
+  let lastFrameTime = 0;
+  let frameCount = 0;
 
   let targetGoal = 0;
-
-  // respawn scheduler (RAF id)
-  let respawnTimer = null;
+  let respawnRAF = null;
+  let enforceRAF = null;
 
   const randInt = (a, b) => Math.floor(a + Math.random() * (b - a + 1));
-
-  function candidateRect(x, y) { return { l: x, t: y, r: x + SIZE, b: y + SIZE }; }
+  const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
 
   function viewportInfo() {
     const vv = window.visualViewport;
@@ -723,108 +742,133 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
     return { w, h, ox, oy };
   }
 
-  // NOTE: we spawn in viewport coordinates (overlay), but use visualViewport offsets for mobile correctness
-  function worldBounds() {
+  function worldBounds(cfg) {
     const { w, h, ox, oy } = viewportInfo();
-    return { l: PAD + ox, t: PAD + oy, r: ox + w - PAD, b: oy + h - PAD };
+    return { l: cfg.PAD + ox, t: cfg.PAD + oy, r: ox + w - cfg.PAD, b: oy + h - cfg.PAD };
   }
 
-  function protectedRects() {
+  const candidateRect = (cfg, x, y) => ({ l: x, t: y, r: x + cfg.SIZE, b: y + cfg.SIZE });
+
+  function computeProtectedRects() {
     const blocks = [];
     const { w: vw, h: vh, ox, oy } = viewportInfo();
-
-    // Visible viewport in *viewport coordinate space* (same as getBoundingClientRect)
     const view = { l: ox, t: oy, r: ox + vw, b: oy + vh };
 
-    function pushIfVisible(rect, pad) {
-      if (!rect) return;
-      const rw = rect.r - rect.l;
-      const rh = rect.b - rect.t;
+    const pushIfVisible = (el, pad) => {
+      if (!el) return;
+      const r = rectOf(el);
+      const rw = r.r - r.l;
+      const rh = r.b - r.t;
       if (rw <= 10 || rh <= 10) return;
-      if (!intersects(rect, view)) return;
-      blocks.push(expandRect(rect, pad));
-    }
+      if (!intersects(r, view)) return;
+      blocks.push(expandRect(r, pad));
+    };
 
-    // Protect only visible "Shoot to reveal" buttons
-    document.querySelectorAll(".tile.locked .target.main-target").forEach((t) => {
-      pushIfVisible(rectOf(t), 10);
-    });
+    $$(".tile.locked .target.main-target").forEach((t) => pushIfVisible(t, 10));
+    pushIfVisible($(".topbar"), 6);
+    pushIfVisible($("footer .container"), 8);
+    $$(".tile.unlocked .panel").forEach((p) => pushIfVisible(p, 8));
 
-    // Topbar
-    const topbar = document.querySelector(".topbar");
-    pushIfVisible(topbar ? rectOf(topbar) : null, 6);
+    const resumeWrap = $("#resumePreviewWrap");
+    if (resumeWrap?.classList.contains("expanded")) pushIfVisible(resumeWrap, 8);
 
-    // Footer only when visible
-    const footerC = document.querySelector("footer .container");
-    pushIfVisible(footerC ? rectOf(footerC) : null, 8);
+    const settingsPanel = $("#settingsMenu[open] .settings-panel");
+    pushIfVisible(settingsPanel, 8);
 
-    // Open panels (only if visible)
-    document.querySelectorAll(".tile.unlocked .panel").forEach((p) => {
-      pushIfVisible(rectOf(p), 8);
-    });
+    if (toastHost) pushIfVisible(toastHost, 8);
 
-    // Resume preview when expanded (only if visible)
-    const resumeWrap = document.getElementById("resumePreviewWrap");
-    if (resumeWrap && resumeWrap.classList.contains("expanded")) {
-      pushIfVisible(rectOf(resumeWrap), 8);
-    }
-
-    // Settings panel when open
-    const settingsPanel = document.querySelector("#settingsMenu[open] .settings-panel");
-    pushIfVisible(settingsPanel ? rectOf(settingsPanel) : null, 8);
-
-    // Toast area
-    if (toastHost) pushIfVisible(rectOf(toastHost), 8);
-
-    // Drop accidental near-fullscreen blockers
     return blocks.filter((r) => {
       const rw = Math.max(0, r.r - r.l);
       const rh = Math.max(0, r.b - r.t);
-      return !(rw > vw * 0.98 && rh > vh * 0.90);
+      return !(rw > vw * 0.98 && rh > vh * 0.9);
     });
   }
 
-  function overlapsLiveTargets(rr, ignoreEnt = null) {
+  function overlapsLiveTargets(cfg, rr) {
     for (const e of ents) {
       if (!e.alive) continue;
-      if (ignoreEnt && e === ignoreEnt) continue;
-      if (intersects(rr, candidateRect(e.x, e.y))) return true;
+      if (intersects(rr, candidateRect(cfg, e.x, e.y))) return true;
     }
     return false;
   }
 
-  function isValidSpawn(x, y, ignoreEnt = null) {
-    const bounds = worldBounds();
-    const rr = candidateRect(x, y);
-
+  function isValidSpawn(cfg, bounds, blocks, x, y) {
+    const rr = candidateRect(cfg, x, y);
     if (rr.l < bounds.l || rr.t < bounds.t || rr.r > bounds.r || rr.b > bounds.b) return false;
-
-    const blocks = protectedRects();
     if (blocks.some((b) => intersects(rr, b))) return false;
-
-    if (overlapsLiveTargets(rr, ignoreEnt)) return false;
+    if (overlapsLiveTargets(cfg, rr)) return false;
     return true;
   }
 
-  function pickSpawnPoint(ignoreEnt = null) {
-    const bounds = worldBounds();
+  function pickSpawnPoint(cfg, bounds, blocks) {
+    const maxX = Math.max(bounds.l, bounds.r - cfg.SIZE);
+    const maxY = Math.max(bounds.t, bounds.b - cfg.SIZE);
+
     for (let tries = 0; tries < 1400; tries++) {
-      const x = randInt(bounds.l, Math.max(bounds.l, bounds.r - SIZE));
-      const y = randInt(bounds.t, Math.max(bounds.t, bounds.b - SIZE));
-      if (isValidSpawn(x, y, ignoreEnt)) return { x, y };
+      const x = randInt(bounds.l, maxX);
+      const y = randInt(bounds.t, maxY);
+      if (isValidSpawn(cfg, bounds, blocks, x, y)) return { x, y };
     }
     return null;
   }
 
-  function setPos(e) { e.el.style.transform = `translate(${e.x}px, ${e.y}px)`; }
+  function setPos(ent) {
+    ent.el.style.transform = `translate(${ent.x}px, ${ent.y}px)`;
+  }
 
   function giveVelocity(ent) {
-    const baseSpeed = isMobile ? 120 : 180;
-    const speed = baseSpeed + Math.random() * (isMobile ? 80 : 140);
+    const baseSpeed = 180;
+    const speed = baseSpeed + Math.random() * 140;
     const ang = Math.random() * Math.PI * 2;
     ent.vx = Math.cos(ang) * speed;
     ent.vy = Math.sin(ang) * speed;
   }
+
+  function reflectVelocity(ent, nx, ny) {
+    const vdot = ent.vx * nx + ent.vy * ny;
+    ent.vx = ent.vx - 2 * vdot * nx;
+    ent.vy = ent.vy - 2 * vdot * ny;
+  }
+
+  function rectOverlapDepth(a, b) {
+    const left = a.r - b.l;
+    const right = b.r - a.l;
+    const top = a.b - b.t;
+    const bottom = b.b - a.t;
+    return { left, right, top, bottom };
+  }
+
+  function resolveAgainstBlocks(ent, blocks, bounds, cfg) {
+    if (!blocks.length) return;
+
+    for (let iter = 0; iter < 5; iter++) {
+      const rr = candidateRect(cfg, ent.x, ent.y);
+      const hit = blocks.find((b) => intersects(rr, b));
+      if (!hit) return;
+
+      const d = rectOverlapDepth(rr, hit);
+
+      let dx = -d.left, dy = 0, min = d.left;
+      if (d.right < min) { min = d.right; dx = d.right; dy = 0; }
+      if (d.top < min) { min = d.top; dx = 0; dy = -d.top; }
+      if (d.bottom < min) { min = d.bottom; dx = 0; dy = d.bottom; }
+
+      const eps = 0.75;
+      if (dx !== 0) ent.x += dx + Math.sign(dx) * eps;
+      if (dy !== 0) ent.y += dy + Math.sign(dy) * eps;
+
+      let nx = 0, ny = 0;
+      if (dx !== 0) nx = Math.sign(dx);
+      else ny = Math.sign(dy);
+
+      reflectVelocity(ent, nx, ny);
+
+      ent.x = clamp(ent.x, bounds.l, bounds.r - ent.w);
+      ent.y = clamp(ent.y, bounds.t, bounds.b - ent.h);
+    }
+  }
+
+  const aliveCount = () => ents.reduce((n, e) => n + (e.alive ? 1 : 0), 0);
 
   function start() {
     stop();
@@ -837,147 +881,112 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
     raf = null;
   }
 
-  function aliveCount() {
-    return ents.filter((e) => e.alive).length;
+  function clearAll() {
+    stop();
+    if (respawnRAF) cancelAnimationFrame(respawnRAF);
+    if (enforceRAF) cancelAnimationFrame(enforceRAF);
+    respawnRAF = null;
+    enforceRAF = null;
+    ents = [];
+    layer.innerHTML = "";
   }
 
-  const bullseyes = document.querySelectorAll('.target.main-target .bullseye, .target.subtarget .bullseye');
+  function hit(ent) {
+    if (!ent.alive) return;
+    ent.alive = false;
 
-  bullseyes.forEach(bull => {
-    bull.addEventListener('click', e => {
-      const btn = bull.closest('.target');
+    const cfg = getCfg();
+    awardPoints(cfg.POINTS_PER_HIT, "TARGET HIT", "Bullseye", { toastMs: 1200 });
 
-      // If it's the resume preview button, toggle preview
-      if (btn?.dataset.action === "resumeExpand") {
-        playBreakAudio();
-        toggleResumePreview(btn);
-
-        // Add section unlock points
-        addPoints(250);
-        unlock(
-          "target_resume", // unique key
-          "Section Opened",
-          `+250 points — Resume preview`
-        )
-
-      } else {
-        const tile = bull.closest('.tile');
-        if (tile) {
-          tile.classList.remove('locked');
-          tile.classList.add('unlocked');
-
-          // Play break audio
-          playBreakAudio();
-
-          // Add section unlock points
-          addPoints(250);
-          unlock(
-            "target_resume", // unique key
-            "Section Opened",
-            `+250 points — Resume preview`
-          )
-
-          // Optional visual feedback
-          bull.style.transform = 'scale(0.7)';
-          bull.style.opacity = '0';
-          setTimeout(() => bull.style.display = 'none', 250);
-        }
-      }
-
-      e.stopPropagation(); // prevent bubbling
-    });
-  });
-
-  function hit(e) {
-    if (!e.alive) return;
-    e.alive = false;
-
-    addPoints(POINTS_PER_HIT);
-
-    const r = e.el.getBoundingClientRect();
-    shatterAt(r.left + r.width / 2, r.top + r.height / 2, isMobile ? 8 : 22);
-
-    // Play break audio
+    const r = ent.el.getBoundingClientRect();
+    shatterAt(r.left + r.width / 2, r.top + r.height / 2, 22);
     playBreakAudio();
 
-    e.el.classList.add("hit");
+    ent.el.classList.add("hit");
     setTimeout(() => {
-      try { e.el.remove(); } catch { }
-      ents = ents.filter((x) => x !== e);
+      try { ent.el.remove(); } catch {}
+      ents = ents.filter((x) => x !== ent);
       scheduleRespawn();
     }, 260);
   }
 
-  function despawnEnt(e) {
-    if (!e.alive) return;
-    e.alive = false;
-
-    const r = e.el.getBoundingClientRect();
-    shatterAt(r.left + r.width / 2, r.top + r.height / 2, isMobile ? 6 : 18);
-
-    try { e.el.remove(); } catch { }
-    ents = ents.filter((x) => x !== e);
-
-    scheduleRespawn();
-  }
-
   function enforceNoCollisions() {
-    const blocks = protectedRects();
+    if (offActive) return;
+
+    const cfg = getCfg();
+    const bounds = worldBounds(cfg);
+    const blocks = computeProtectedRects();
+
     for (const e of ents) {
       if (!e.alive) continue;
-      const rr = candidateRect(e.x, e.y);
-      if (blocks.some((b) => intersects(rr, b))) despawnEnt(e);
+
+      if (!arcadeMotionEnabled()) {
+        e.vx = 0;
+        e.vy = 0;
+        e.x = clamp(e.x, bounds.l, bounds.r - e.w);
+        e.y = clamp(e.y, bounds.t, bounds.b - e.h);
+      } else {
+        resolveAgainstBlocks(e, blocks, bounds, cfg);
+      }
+      setPos(e);
     }
   }
 
-  // Spawn as many as possible immediately up to the goal
   function fillToGoal() {
+    if (offActive) return;
+
+    const cfg = getCfg();
+    const bounds = worldBounds(cfg);
+    const blocks = computeProtectedRects();
+
     while (aliveCount() < targetGoal) {
-      const p = pickSpawnPoint();
+      const p = pickSpawnPoint(cfg, bounds, blocks);
       if (!p) break;
 
       const el = document.createElement("button");
       el.type = "button";
       el.className = "game-target";
-      el.textContent = "";
       el.setAttribute("aria-label", "Target");
       layer.appendChild(el);
 
-      const ent = { el, alive: true, x: p.x, y: p.y, vx: 0, vy: 0, w: SIZE, h: SIZE };
-      if (arcadeMode) giveVelocity(ent);
+      const ent = { el, alive: true, x: p.x, y: p.y, vx: 0, vy: 0, w: cfg.SIZE, h: cfg.SIZE };
+      if (arcadeMotionEnabled()) giveVelocity(ent);
 
       setPos(ent);
-      el.addEventListener("click", () => hit(ent), { passive: true });
       ents.push(ent);
     }
   }
 
   function scheduleRespawn() {
-    if (respawnTimer) return;
-    respawnTimer = requestAnimationFrame(() => {
-      respawnTimer = null;
+    if (offActive) return;
+    if (respawnRAF) return;
+    respawnRAF = requestAnimationFrame(() => {
+      respawnRAF = null;
       enforceNoCollisions();
       fillToGoal();
     });
   }
 
   function spawnInitialWave() {
-    stop();
-    ents = [];
-    layer.innerHTML = "";
+    clearAll();
+    if (offActive) return;
 
-    targetGoal = randInt(MIN, MAX);
+    const cfg = getCfg();
+    targetGoal = randInt(cfg.MIN, cfg.MAX);
 
     fillToGoal();
     enforceNoCollisions();
     fillToGoal();
 
-    if (arcadeMode) start();
+    start();
   }
 
-  let frameCount = 0;
-
   function tick(t) {
+    if (offActive) return;
+
+    const cfg = getCfg();
+    const interval = 1000 / cfg.FPS;
+
     if (t - lastFrameTime < interval) {
       raf = requestAnimationFrame(tick);
       return;
@@ -987,18 +996,20 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
     const dt = Math.min(0.033, (t - last) / 1000);
     last = t;
 
-    if (!arcadeMode) return;
-
-    frameCount++; // ✅ count frames
-
-    const bounds = worldBounds();
-
-    // ✅ Only calculate collisions every 3 frames (huge performance win)
-    if (frameCount % 3 === 0 || blocksDirty) {
-      cachedBlocks = protectedRects();
-      blocksDirty = false;
+    if (!arcadeMotionEnabled()) {
+      raf = requestAnimationFrame(tick);
+      return;
     }
 
+    frameCount++;
+
+    const bounds = worldBounds(cfg);
+
+    const refreshEvery = 3;
+    if (frameCount % refreshEvery === 0 || blocksDirty) {
+      cachedBlocks = computeProtectedRects();
+      blocksDirty = false;
+    }
     const blocks = cachedBlocks;
 
     for (const e of ents) {
@@ -1007,19 +1018,13 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
       e.x += e.vx * dt;
       e.y += e.vy * dt;
 
-      if (e.x <= bounds.l) { e.x = bounds.l; e.vx *= -1; }
-      if (e.y <= bounds.t) { e.y = bounds.t; e.vy *= -1; }
-      if (e.x + e.w >= bounds.r) { e.x = bounds.r - e.w; e.vx *= -1; }
-      if (e.y + e.h >= bounds.b) { e.y = bounds.b - e.h; e.vy *= -1; }
+      if (e.x <= bounds.l) { e.x = bounds.l; if (e.vx < 0) e.vx = -e.vx; }
+      else if (e.x + e.w >= bounds.r) { e.x = bounds.r - e.w; if (e.vx > 0) e.vx = -e.vx; }
 
-      // ✅ Only check collision when blocks exist
-      if (blocks.length) {
-        const rr = candidateRect(e.x, e.y);
-        if (blocks.some((b) => intersects(rr, b))) {
-          despawnEnt(e);
-          continue;
-        }
-      }
+      if (e.y <= bounds.t) { e.y = bounds.t; if (e.vy < 0) e.vy = -e.vy; }
+      else if (e.y + e.h >= bounds.b) { e.y = bounds.b - e.h; if (e.vy > 0) e.vy = -e.vy; }
+
+      if (blocks.length) resolveAgainstBlocks(e, blocks, bounds, cfg);
 
       setPos(e);
     }
@@ -1027,10 +1032,14 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
     raf = requestAnimationFrame(tick);
   }
 
-  // priority hit handler
+  // Pointer handler (will early-out when offActive)
   document.addEventListener("pointerdown", (e) => {
+    if (offActive) return;
+
     const el = e.target instanceof Element ? e.target : null;
-    if (el && el.closest(".topbar, footer, a, button:not(.game-target):not(.target), .btn, .card, .card *, input, textarea, select")) return;
+    if (el && el.closest(".topbar, footer, a, button:not(.game-target):not(.target), .btn, .card, .card *, input, textarea, select")) {
+      return;
+    }
 
     const stack = document.elementsFromPoint(e.clientX, e.clientY);
     const btn = stack.find((n) => n instanceof Element && n.classList?.contains("game-target"));
@@ -1044,12 +1053,12 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
     e.stopPropagation();
   }, { capture: true, passive: false });
 
-  let enforceRAF = null;
   function scheduleEnforce() {
+    if (offActive) return;
     if (enforceRAF) return;
     enforceRAF = requestAnimationFrame(() => {
       enforceRAF = null;
-      blocksDirty = true; // ✅ ADD THIS
+      blocksDirty = true;
       enforceNoCollisions();
       scheduleRespawn();
     });
@@ -1062,36 +1071,60 @@ document.querySelectorAll('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEa
 
   window.addEventListener("scroll", onLayoutChange, { passive: true });
   window.addEventListener("resize", onLayoutChange, { passive: true });
+  window.visualViewport?.addEventListener("resize", onLayoutChange, { passive: true });
+  window.visualViewport?.addEventListener("scroll", onLayoutChange, { passive: true });
+  window.addEventListener("orientationchange", () => setTimeout(onLayoutChange, 250), { passive: true });
 
-  // arcade toggle listener
   const mo = new MutationObserver(() => {
     arcadeMode = root.dataset.arcade === "1";
     applyMusicState();
 
-    if (arcadeMode) {
-      ents.forEach((e) => {
-        if (!e.alive) return;
-        if (e.vx === 0 && e.vy === 0) giveVelocity(e);
-      });
+    if (offActive) return;
+
+    if (arcadeMotionEnabled()) {
+      ents.forEach((e) => { if (e.alive && e.vx === 0 && e.vy === 0) giveVelocity(e); });
       start();
     } else {
-      stop();
       ents.forEach((e) => { e.vx = 0; e.vy = 0; setPos(e); });
+      if (!raf) start();
     }
 
     scheduleEnforce();
   });
   mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-arcade"] });
 
-  // Kick off
-  spawnInitialWave();
+  // ✅ Dynamic enable/disable when layout changes (mobile <-> desktop, portrait <-> landscape, etc.)
+  function reconcileOffLayout() {
+    const shouldOff = isOffLayout();
 
-  // One reliable "post-load settle" pass (boot fade + mobile URL bar)
-  window.addEventListener("load", () => {
-    setTimeout(scheduleEnforce, 950);
-  }, { once: true });
+    if (shouldOff === offActive) {
+      // still update CSS state (e.g. aria/display) just in case
+      layer.style.display = shouldOff ? "none" : "";
+      layer.toggleAttribute("aria-hidden", shouldOff);
+      return;
+    }
 
-  window.visualViewport?.addEventListener("resize", scheduleEnforce, { passive: true });
-  window.visualViewport?.addEventListener("scroll", scheduleEnforce, { passive: true });
-  window.addEventListener("orientationchange", () => setTimeout(scheduleEnforce, 250), { passive: true });
+    offActive = shouldOff;
+
+    layer.style.display = offActive ? "none" : "";
+    layer.toggleAttribute("aria-hidden", offActive);
+
+    if (offActive) {
+      clearAll();
+    } else {
+      spawnInitialWave();
+      scheduleEnforce();
+    }
+  }
+
+  // init
+  reconcileOffLayout();
+  if (!offActive) spawnInitialWave();
+
+  // watch for changes
+  mqMobile.addEventListener?.("change", reconcileOffLayout);
+  window.addEventListener("resize", reconcileOffLayout, { passive: true });
+  window.visualViewport?.addEventListener("resize", reconcileOffLayout, { passive: true });
+  window.visualViewport?.addEventListener("scroll", reconcileOffLayout, { passive: true });
+  window.addEventListener("orientationchange", () => setTimeout(reconcileOffLayout, 250), { passive: true });
 })();
