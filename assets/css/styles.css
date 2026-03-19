@@ -21,7 +21,7 @@
 
   --targetH: 120px;
 
-  --openMs: 3000ms;
+  --openMs: 2000ms;
   --panelEase: cubic-bezier(.22, 1, .36, 1);
 }
 
@@ -280,6 +280,7 @@ button:focus-visible,
   background: rgba(255, 255, 255, .04);
   box-shadow: var(--shadow);
   overflow: visible;
+  position: relative
 }
 
 /* Summary tile */
@@ -813,6 +814,61 @@ footer {
 
 .tile.section-card.unlocked {
   padding: 20px !important;
+}
+
+
+/* Optional: slightly smaller sub-targets */
+.tile .target.subtarget .bullseye {
+  width: 44px;
+  height: 44px;
+  margin: 0;
+}
+
+/* Ensure the button itself is relative */
+.target.main-target,
+.target.subtarget {
+  position: relative;
+  overflow: visible;
+}
+
+/* Bullseye styling: always centered inside the button */
+.target.main-target .bullseye,
+.target.subtarget .bullseye {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 54px;
+  height: 54px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 50% 50%,
+      rgba(15,15,15,0.95) 0 6px,
+      rgba(245,245,245,0.95) 6px 10px,
+      rgba(190,30,30,0.92) 10px 16px,
+      rgba(245,245,245,0.92) 16px 22px,
+      rgba(25,25,25,0.88) 22px 27px);
+  border: 2px solid rgba(240,240,240,0.65);
+  box-shadow:
+    0 16px 55px rgba(0,0,0,0.55),
+    inset 0 0 0 1px rgba(0,0,0,0.35);
+  z-index: 1;
+  cursor: crosshair;
+}
+
+/* Always show the bullseye for the preview button */
+.target.subtarget.preview .bullseye {
+  display: block !important;
+}
+
+/* Ensure label stays above bullseye */
+.target.main-target .target-label,
+.target.main-target .target-sub,
+.target.subtarget .target-label,
+.target.subtarget .target-sub {
+  position: relative;
+  z-index: 2;
+  pointer-events: none;
 }
 
 /* Target button */
