@@ -1,3 +1,8 @@
+/* =============================================
+   Main CSS - GitHub Pages Compatible
+   Converted from style.scss → plain CSS
+============================================= */
+
 :root {
   --bg0: #05020a;
   --bg1: #070b1c;
@@ -113,6 +118,8 @@ body::before {
   mix-blend-mode: overlay;
   opacity: .38;
 }
+
+/* ...rest of the CSS remains identical... */
 
 /* Hamburger nav (desktop: far left) */
 .nav-menu {
