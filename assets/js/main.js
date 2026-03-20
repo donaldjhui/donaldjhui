@@ -1,1378 +1,1279 @@
-/* =============================================
-   Main CSS - GitHub Pages Compatible
-   Converted from style.scss → plain CSS
-============================================= */
+/* =========================================================
+   main.js (REFactor - drop-in)
+   - Section unlock: ONE combined toast (+points)
+   - Game target hit: points toast per hit
+   - Arcade targets: real 2D elastic wall bounce (left/right/top/bottom)
+   - Arcade targets: bounce off protected UI blocks (no shatter/despawn)
+   - Mobile perf optimizations:
+       * fewer shards + shorter shard lifetime
+       * fewer targets + lower FPS on mobile
+       * less frequent protected-rect recalcs on mobile
+       * keep RAF alive even when Arcade is OFF
+   - CHANGE: Disable ARCADE MOTION on mobile (fastest/cleanest)
+     (Arcade toggle still affects music + UI label, but targets stay still on mobile.)
+   - CHANGE: Scoring zones
+       * Big subject targets: bullseye=250, body=125
+       * Floating targets: bullseye=100, body=50
+========================================================= */
 
-:root {
-  --bg0: #05020a;
-  --bg1: #070b1c;
+(() => {
+  try { if ("scrollRestoration" in history) history.scrollRestoration = "manual"; } catch { }
+  if (location.hash) {
+    try { history.replaceState(null, "", location.pathname + location.search); } catch { }
+  }
+  const forceTop = () => window.scrollTo(0, 0);
+  forceTop();
+  window.addEventListener("DOMContentLoaded", forceTop, { once: true });
+  window.addEventListener("load", () => requestAnimationFrame(forceTop), { once: true });
+  window.addEventListener("pageshow", (e) => { if (e.persisted) forceTop(); });
+})();
 
-  --text: rgba(255, 255, 255, 0.94);
-  --muted: rgba(255, 255, 255, 0.72);
-  --muted2: rgba(255, 255, 255, 0.58);
+const root = document.documentElement;
+const mqMobile = matchMedia("(max-width: 767px)");
+const isTouchDevice = () =>
+  (navigator.maxTouchPoints || 0) > 0 ||
+  matchMedia("(pointer: coarse)").matches;
 
-  --cyan: #00e5ff;
-  --mag: #ff2bd6;
-  --acid: #b7ff00;
+// "No space on left/right for targets" (portrait monitors, narrow windows, etc.)
+function noSideSpaceNow() {
+  const vv = window.visualViewport;
+  const w = vv?.width ?? innerWidth;
+  const h = vv?.height ?? innerHeight;
 
-  --shadow: 0 26px 90px rgba(0, 0, 0, 0.7);
-  --radius: 20px;
-  --max: 1120px;
+  const TARGET = 54; // keep in sync with game cfg SIZE
+  const PAD = 10;    // keep in sync with game cfg PAD
+  const MIN_GUTTER_EACH_SIDE = 70; // required empty space on both sides
 
-  --mx: 50%;
-  --my: 30%;
-  --tiltX: 0deg;
-  --tiltY: 0deg;
+  const portraitLike = h / Math.max(1, w) >= 1.25;
+  const minNeededWidth = (PAD * 2) + TARGET + (MIN_GUTTER_EACH_SIDE * 2);
 
-  --targetH: 120px;
-
-  --openMs: 2000ms;
-  --panelEase: cubic-bezier(0.22, 1, 0.36, 1);
+  return portraitLike || w < minNeededWidth;
 }
 
-* {
-  box-sizing: border-box;
+// Used everywhere (shards + targets): now includes portrait monitors too
+const isMobileNow = () => mqMobile.matches || isTouchDevice() || noSideSpaceNow();
+
+const $ = (sel, rootEl = document) => rootEl.querySelector(sel);
+const $$ = (sel, rootEl = document) => Array.from(rootEl.querySelectorAll(sel));
+
+function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
+function lsSet(key, val) { try { localStorage.setItem(key, val); } catch { } }
+
+function rectOf(el) {
+  const r = el.getBoundingClientRect();
+  return { l: r.left, t: r.top, r: r.right, b: r.bottom };
+}
+function expandRect(r, m) { return { l: r.l - m, t: r.t - m, r: r.r + m, b: r.b + m }; }
+function intersects(a, b) { return !(a.r <= b.l || a.l >= b.r || a.b <= b.t || a.t >= b.b); }
+
+const yearEl = $("#year");
+if (yearEl) yearEl.textContent = String(new Date().getFullYear());
+
+const heroCard = $(".hero-main");
+const reticle = $(".reticle");
+const muzzle = $("#muzzle");
+const xpFill = $("#xpFill");
+const toastHost = $("#toast");
+
+/* ---------- MILESTONE host (top-center) ---------- */
+const milestoneHost = (() => {
+  const el = document.createElement("div");
+  el.id = "milestoneToast";
+  document.body.appendChild(el);
+  return el;
+})();
+
+function milestoneToast(title, msg, { ms = 5200 } = {}) {
+  const host = milestoneHost;
+  if (!host) return;
+
+  const el = document.createElement("div");
+  el.className = "t";
+  el.innerHTML = `
+    <div class="title">${title}</div>
+    <div class="msg">${msg}</div>
+    <div class="bar"><i></i></div>
+  `;
+  host.prepend(el);
+  setTimeout(() => el.remove(), ms);
 }
 
-html {
-  scroll-behavior: smooth;
-  overflow-anchor: none;
+/* ---------- Storage keys ---------- */
+const LS = Object.freeze({
+  SFX_ON: "sfxOn",
+  MUSIC_ON: "musicOn",
+  ARCADE_ON: "arcadeOn",
+  ACH: "achievements_v3",
+  MILESTONE: "points_milestone_v1",
+});
+
+let arcadeMode = (lsGet(LS.ARCADE_ON) ?? "0") === "1"; // default OFF
+let sfxOn = (lsGet(LS.SFX_ON) ?? "1") === "1";         // default ON
+let musicOn = (lsGet(LS.MUSIC_ON) ?? "0") === "1";     // default OFF
+
+/* FX always HIGH */
+const fxHigh = true;
+
+root.dataset.arcade = arcadeMode ? "1" : "0";
+root.dataset.fx = "1";
+
+/* ---------- Break audio ---------- */
+const breakAudio = new Audio("./assets/audio/effect_break.mp3");
+function playBreakAudio() {
+  if (!sfxOn) return;
+  const a = breakAudio.cloneNode();
+  a.volume = 0.15;
+  a.play().catch(() => { });
 }
 
-body {
-  margin: 0;
-  color: var(--text);
-  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  line-height: 1.55;
-  overflow-x: hidden;
-  background:
-    radial-gradient(1100px 700px at 18% 0%, rgba(124, 92, 255, 0.22), transparent 58%),
-    radial-gradient(900px 650px at 88% 10%, rgba(0, 229, 255, 0.18), transparent 60%),
-    radial-gradient(900px 650px at 60% 110%, rgba(255, 43, 214, 0.14), transparent 55%),
-    linear-gradient(180deg, var(--bg0), var(--bg1));
+/* ---------- Toasts / Achievements ---------- */
+function toast(title, msg, { ms = 5000 } = {}) {
+  if (!toastHost) return;
+  const el = document.createElement("div");
+  el.className = "t";
+  el.innerHTML = `
+    <div class="title">${title}</div>
+    <div class="msg">${msg}</div>
+    <div class="bar"><i></i></div>
+  `;
+  toastHost.prepend(el);
+  setTimeout(() => el.remove(), ms);
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+let achievedArr = [];
+try { achievedArr = JSON.parse(lsGet(LS.ACH) || "[]"); } catch { achievedArr = []; }
+const achieved = new Set(achievedArr);
+
+function unlock(key, title, msg, { silent = false } = {}) {
+  if (achieved.has(key)) return false;
+  achieved.add(key);
+  lsSet(LS.ACH, JSON.stringify([...achieved]));
+  if (!silent) toast("ACHIEVEMENT UNLOCKED", `${title} — ${msg}`);
+  return true;
 }
 
-.container {
-  width: min(var(--max), calc(100% - 42px));
-  margin: 0 auto;
+/* ---------- Points (reset every load) ---------- */
+let points = 0;
+const pointsEl = $("#pointsValue");
+function renderPoints() { if (pointsEl) pointsEl.textContent = String(points); }
+
+const QUOTES = [
+  "Keep going — consistency beats intensity.",
+  "You’re building momentum. Stay with it.",
+  "Small wins compound. Great job.",
+  "Progress over perfection — every time.",
+  "Lock in. One step at a time.",
+  "Discipline creates options. You’re doing it.",
+  "Stay focused — you’re closer than you think.",
+  "Strong systems beat strong feelings. Keep executing.",
+  "Today’s effort is tomorrow’s advantage.",
+  "You showed up. That’s what pros do.",
+  "Discipline beats motivation every time.",
+  "You don’t need more time — you need more focus.",
+  "Small progress is still progress.",
+  "Consistency turns average into excellence.",
+  "The work you avoid is the life you want.",
+  "Stay focused — results are coming.",
+  "Effort today pays off tomorrow.",
+  "You’re closer than you think.",
+  "Do it tired. Do it unmotivated. Just do it.",
+  "Winners are just people who didn’t quit.",
+  "You didn’t come this far to only come this far.",
+  "Future you is watching. Don’t embarrass them.",
+  "You can do hard things… unfortunately.",
+  "No one’s coming to save you. That’s the good news.",
+  "You vs you. Try not to lose.",
+  "Get up. The grind won’t grind itself.",
+  "Be disciplined… or be disappointed.",
+  "If it was easy, you’d already be bored.",
+  "Do it for the version of you that’s tired of this.",
+  "Progress is progress, even if it’s ugly.",
+  "Comfort is expensive. Growth is cheaper.",
+  "You’re not stuck — you’re just not moving.",
+  "Excuses don’t build results.",
+  "You know what to do. Now do it.",
+  "Stop negotiating with yourself.",
+  "Average is crowded. Leave.",
+  "You’re capable — act like it.",
+  "The only shortcut is discipline.",
+  "No pressure, but your future depends on this.",
+  "Lock in or fall behind.",
+  "XP doesn’t earn itself.",
+  "You just leveled up. Don’t log off now.",
+  "Grind now, flex later.",
+  "Skill issue? Fix it.",
+  "You missed 100% of the shots you didn’t take.",
+  "Respawn. Try again. Win.",
+  "You’re in the build phase. Keep going.",
+  "Main character energy only.",
+  "Achievement unlocked: Still going.",
+  "Pause is not quit.",
+];
+
+let lastMilestone = 0;
+{
+  const saved = parseInt(lsGet(LS.MILESTONE) || "0", 10);
+  lastMilestone = Number.isFinite(saved) ? saved : 0;
 }
 
-/* =========================
-   Background layers
-========================= */
+function checkPointMilestone() {
+  const milestone = Math.floor(points / 1000) * 1000;
+  if (milestone >= 1000 && milestone > lastMilestone) {
+    lastMilestone = milestone;
+    lsSet(LS.MILESTONE, String(lastMilestone));
+    const quote = QUOTES[(Math.random() * QUOTES.length) | 0];
 
-body::before {
-  content: "";
-  position: fixed;
-  inset: -30vmax;
-  pointer-events: none;
-  z-index: -4;
-  background:
-    linear-gradient(to right, transparent 0 21px, rgba(0, 229, 255, 0.1) 22px),
-    linear-gradient(to bottom, transparent 0 21px, rgba(255, 43, 214, 0.08) 22px);
-  background-size: 22px 22px;
-  transform: perspective(900px) rotateX(74deg) translateY(30vh);
-  opacity: 0.55;
-  filter: blur(0.15px);
-}
-
-.aurora {
-  position: fixed;
-  inset: -40vmax;
-  pointer-events: none;
-  z-index: -3;
-  background:
-    radial-gradient(900px 600px at var(--mx) var(--my), rgba(0, 229, 255, 0.22), transparent 60%),
-    radial-gradient(900px 650px at calc(var(--mx) + 14%) calc(var(--my) + 10%), rgba(255, 43, 214, 0.18), transparent 62%),
-    radial-gradient(900px 650px at calc(var(--mx) - 12%) calc(var(--my) + 18%), rgba(183, 255, 0, 0.10), transparent 60%);
-  filter: blur(26px) saturate(180%);
-  opacity: 0.95;
-  transform: translateZ(0);
-}
-
-.noise {
-  position: fixed;
-  inset: 0;
-  z-index: -2;
-  pointer-events: none;
-  opacity: 0.20;
-  mix-blend-mode: overlay;
-  filter: contrast(120%);
-  background-size: 420px 420px;
-}
-
-.vignette {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background:
-    radial-gradient(circle at 50% 22%, transparent 38%, rgba(0, 0, 0, 0.62) 95%),
-    repeating-linear-gradient(to bottom,
-      rgba(255, 255, 255, 0.05) 0px,
-      rgba(255, 255, 255, 0.05) 1px,
-      rgba(0, 0, 0, 0) 3px,
-      rgba(0, 0, 0, 0) 6px);
-  mix-blend-mode: overlay;
-  opacity: 0.38;
-}
-
-/* ...rest of the CSS remains identical... */
-
-/* =========================
-   Navigation
-========================= */
-
-.nav-menu {
-  position: relative;
-  flex: 0 0 auto;
-}
-
-.nav-menu>summary {
-  list-style: none;
-}
-
-.nav-menu>summary::-webkit-details-marker {
-  display: none;
-}
-
-.nav-panel {
-  position: absolute;
-  left: 0;
-  top: calc(100% + 10px);
-  min-width: 220px;
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(10, 6, 18, 0.78);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: 0 26px 90px rgba(0, 0, 0, 0.7);
-  z-index: 2000;
-}
-
-.nav-link {
-  width: 100%;
-  text-align: left;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.04);
-  color: inherit;
-  cursor: pointer;
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.nav-link:hover {
-  border-color: rgba(0, 229, 255, 0.28);
-}
-
-@media (max-width: 720px) {
-  .nav-panel {
-    left: 0;
-    right: 0;
-    min-width: 0;
-    width: min(360px, calc(100vw - 24px));
+    // ✅ MILESTONE now shows top-center (still every 1000)
+    milestoneToast("MILESTONE", `${milestone} points — ${quote}`);
   }
 }
 
-/* =========================
-   Topbar / Brand
-========================= */
-
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  border-bottom: 1px solid rgba(0, 229, 255, 0.22);
-  background: linear-gradient(to bottom, rgba(5, 2, 10, 0.86), rgba(5, 2, 10, 0.50));
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+function addPoints(n) {
+  points = Math.max(0, points + n);
+  renderPoints();
+  checkPointMilestone();
 }
 
-.topbar::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.75), rgba(255, 43, 214, 0.65), transparent);
-  opacity: 0.65;
-  pointer-events: none;
+function awardPoints(amount, title = "POINTS", msg = "", { toastMs = 5000 } = {}) {
+  addPoints(amount);
+  toast(title, msg ? `${msg} — +${amount} points` : `+${amount} points`, { ms: toastMs });
 }
 
-.topbar-inner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 14px 0;
+function resetPoints() {
+  points = 0;
+  renderPoints();
+  lastMilestone = 0;
+  lsSet(LS.MILESTONE, "0");
 }
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 230px;
+resetPoints();
+$("#pointsResetBtn")?.addEventListener("click", resetPoints);
+
+/* ---------- XP bar ---------- */
+function updateXP() {
+  if (!xpFill) return;
+  const h = document.documentElement;
+  const scrollTop = h.scrollTop || document.body.scrollTop;
+  const scrollHeight = (h.scrollHeight || document.body.scrollHeight) - h.clientHeight;
+  const p = scrollHeight > 0 ? (scrollTop / scrollHeight) * 100 : 0;
+  xpFill.style.width = p.toFixed(2) + "%";
+}
+window.addEventListener("scroll", updateXP, { passive: true });
+updateXP();
+
+/* ... keep the rest of your file exactly as-is from here ... */
+
+/* ---------- Tilt / reticle ---------- */
+function shouldTilt() {
+  if (!fxHigh) return false;
+  if (matchMedia?.("(prefers-reduced-motion: reduce)").matches) return false;
+  if (window.innerWidth < 860) return false;
+  return true;
 }
 
-.avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  object-fit: cover;
-  border: 1px solid rgba(0, 229, 255, 0.32);
-  box-shadow:
-    0 0 0 1px rgba(255, 43, 214, 0.20),
-    0 16px 38px rgba(0, 0, 0, 0.45),
-    0 0 26px rgba(0, 229, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
-  display: block;
-}
+window.addEventListener("pointermove", (e) => {
+  const xPct = (e.clientX / window.innerWidth) * 100;
+  const yPct = (e.clientY / window.innerHeight) * 100;
+  root.style.setProperty("--mx", xPct.toFixed(2) + "%");
+  root.style.setProperty("--my", yPct.toFixed(2) + "%");
 
-.brand-title {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.1;
-}
-
-.brand-title strong {
-  font-size: 14px;
-  letter-spacing: 0.5px;
-  font-weight: 900;
-  text-transform: uppercase;
-}
-
-.brand-title span {
-  font-size: 12px;
-  color: var(--muted2);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-}
-
-/* Focus */
-a:focus-visible,
-button:focus-visible,
-.btn:focus-visible {
-  outline: 2px solid rgba(0, 229, 255, 0.65);
-  outline-offset: 3px;
-  border-radius: 12px;
-}
-
-/* =========================
-   Layout / Tiles
-========================= */
-
-.hero {
-  padding: 26px 0 36px;
-}
-
-.bento {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 14px;
-  overflow: visible;
-}
-
-.tile {
-  border-radius: var(--radius);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  background: rgba(255, 255, 255, 0.04);
-  box-shadow: var(--shadow);
-  overflow: visible;
-  position: relative;
-}
-
-/* Summary tile */
-.hero-main {
-  grid-column: span 12;
-  padding: 22px;
-  padding-bottom: 34px;
-  overflow: visible !important;
-  transform: perspective(1200px) rotateX(var(--tiltX)) rotateY(var(--tiltY));
-  transform-origin: center;
-  will-change: transform;
-}
-
-.hero-main .panel {
-  overflow: visible;
-}
-
-.kicker {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 12px;
-  letter-spacing: 0.10em;
-  text-transform: uppercase;
-  color: var(--muted2);
-}
-
-.pulse {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--acid);
-  box-shadow: 0 0 0 0 rgba(183, 255, 0, 0.45);
-  animation: pulse 1.6s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(183, 255, 0, 0.38);
+  if (reticle) {
+    reticle.style.left = e.clientX + "px";
+    reticle.style.top = e.clientY + "px";
   }
 
-  70% {
-    box-shadow: 0 0 0 14px rgba(183, 255, 0, 0);
+  if (!heroCard || !shouldTilt()) return;
+  const rect = heroCard.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const dx = (e.clientX - cx) / rect.width;
+  const dy = (e.clientY - cy) / rect.height;
+
+  root.style.setProperty("--tiltY", (dx * 6).toFixed(2) + "deg");
+  root.style.setProperty("--tiltX", (-dy * 6).toFixed(2) + "deg");
+}, { passive: true });
+
+/* ---------- Noise background ---------- */
+(() => {
+  const seed = Math.floor(Math.random() * 1e9);
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="420" height="420">
+      <filter id="n">
+        <feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="3" stitchTiles="stitch" seed="${seed}"/>
+        <feColorMatrix type="matrix" values="
+          1 0 0 0 0
+          0 1 0 0 0
+          0 0 1 0 0
+          0 0 0 .55 0"/>
+      </filter>
+      <rect width="100%" height="100%" filter="url(#n)"/>
+    </svg>`;
+  const url = "data:image/svg+xml;utf8," + encodeURIComponent(svg);
+  const noiseEl = $(".noise");
+  if (noiseEl) noiseEl.style.backgroundImage = `url("${url}")`;
+})();
+
+/* ---------- Reveal on scroll ---------- */
+(() => {
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) e.target.classList.add("in");
+  }, { threshold: 0.12 });
+
+  $$(".reveal").forEach((el) => { try { io.observe(el); } catch { } });
+})();
+
+/* ---------- Boot overlay ---------- */
+(() => {
+  const boot = $("#boot");
+  if (!boot) return;
+
+  const dismiss = () => {
+    boot.classList.add("off");
+    setTimeout(() => boot.remove(), 550);
+  };
+
+  window.addEventListener("load", () => setTimeout(dismiss, 900));
+  boot.addEventListener("pointerdown", dismiss, { passive: true });
+  window.addEventListener("keydown", dismiss, { once: true });
+})();
+
+/* ---------- SFX (bleeps) ---------- */
+let audioCtx = null;
+function ensureAudio() {
+  if (audioCtx) return audioCtx;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+const SFX_BASE_GAIN = 0.15;
+
+function bleep(freq = 660, dur = 0.05, type = "sine", gainMult = 1) {
+  if (!sfxOn) return;
+  const ctx = ensureAudio();
+  const t0 = ctx.currentTime;
+
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t0);
+
+  const peak = Math.min(0.9, SFX_BASE_GAIN * gainMult);
+  g.gain.setValueAtTime(0.0001, t0);
+  g.gain.exponentialRampToValueAtTime(peak, t0 + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+
+  o.connect(g).connect(ctx.destination);
+  o.start(t0);
+  o.stop(t0 + dur + 0.02);
+}
+
+/* ---------- Music engine ---------- */
+const bgmAmbient = $("#bgmAmbient");
+const bgmArcade = $("#bgmArcade");
+let bgmUnlocked = false;
+const MUSIC_VOL = 0.15;
+
+function applyMusicState() {
+  if (!musicOn) {
+    try { bgmAmbient?.pause(); } catch { }
+    try { bgmArcade?.pause(); } catch { }
+    return;
   }
 
-  100% {
-    box-shadow: 0 0 0 0 rgba(183, 255, 0, 0);
+  const on = arcadeMode ? bgmArcade : bgmAmbient;
+  const off = arcadeMode ? bgmAmbient : bgmArcade;
+
+  try { off?.pause(); } catch { }
+  if (on) on.volume = MUSIC_VOL;
+
+  if (!bgmUnlocked) return;
+  try { on?.play(); } catch { }
+}
+
+function unlockBgmOnce() {
+  if (bgmUnlocked) return;
+  bgmUnlocked = true;
+  applyMusicState();
+}
+
+window.addEventListener("pointerdown", unlockBgmOnce, { once: true, passive: true });
+window.addEventListener("keydown", unlockBgmOnce, { once: true });
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") {
+    try { bgmAmbient?.pause(); } catch { }
+    try { bgmArcade?.pause(); } catch { }
+  } else {
+    applyMusicState();
   }
-}
+});
 
-.subtitle {
-  color: var(--muted);
-  margin: 12px 0 0;
-  max-width: 920px;
-}
+/* ---------- Settings dropdown ---------- */
+(() => {
+  const settingsMenu = $("#settingsMenu");
+  if (!settingsMenu) return;
 
-/* Buttons */
-.cta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 16px;
-}
+  const closeSettings = () => { if (settingsMenu.open) settingsMenu.open = false; };
 
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px 14px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.04);
-  color: #fff;
-  font-weight: 700;
-  cursor: pointer;
-  transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease, background 0.12s ease;
-  will-change: transform;
-}
+  document.addEventListener("pointerdown", (e) => {
+    if (!settingsMenu.open) return;
+    const t = e.target instanceof Element ? e.target : null;
+    if (!t) return;
+    if (t.closest("#settingsMenu")) return;
+    closeSettings();
+  }, { capture: true });
 
-.btn.primary {
-  background: linear-gradient(90deg, rgba(0, 229, 255, 0.25), rgba(255, 43, 214, 0.18));
-  border-color: rgba(0, 229, 255, 0.28);
-}
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeSettings();
+  });
+})();
 
-.btn.ghost {
-  background: transparent;
-}
+/* ---------- Settings toggles (NO FX toggle) ---------- */
+(() => {
+  const arcadeBtn = $("#arcadeToggle");
+  const sfxBtn = $("#sfxToggle");
+  const musicBtn = $("#musicToggle");
 
-.btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 16px 45px rgba(0, 0, 0, 0.55), 0 0 26px rgba(0, 229, 255, 0.10);
-  border-color: rgba(0, 229, 255, 0.35);
-}
-
-.btn:active {
-  transform: translateY(0) scale(0.98);
-}
-
-/* Cards */
-.grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  margin-top: 14px;
-}
-
-@media (max-width: 860px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.card {
-  border-radius: 18px;
-  padding: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  background: rgba(0, 0, 0, 0.16);
-  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
-}
-
-.card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 28px 95px rgba(0, 0, 0, 0.65);
-  border-color: rgba(255, 43, 214, 0.22);
-}
-
-.card h3 {
-  margin: 0 0 8px;
-}
-
-.card p {
-  margin: 0 0 12px;
-  color: var(--muted);
-  font-size: 14px;
-}
-
-.link {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 800;
-}
-
-.arrow {
-  opacity: 0.85;
-}
-
-.chips {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 10px;
-}
-
-.chip {
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.86);
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-/* Sections */
-section {
-  scroll-margin-top: 96px;
-}
-
-.section-card {
-  padding: 20px;
-}
-
-.section-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-h2 {
-  margin: 0;
-  font-size: 18px;
-  letter-spacing: 0.4px;
-  font-weight: 950;
-  text-transform: uppercase;
-}
-
-.tagline {
-  margin: 0;
-  color: var(--muted2);
-  font-size: 12px;
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-}
-
-.p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 14px;
-}
-
-footer {
-  padding: 22px 0 40px;
-  color: var(--muted2);
-  font-size: 13px;
-}
-
-/* Reveal */
-.reveal {
-  opacity: 0;
-  transform: translateY(18px) scale(0.985);
-  transition: opacity 0.55s ease, transform 0.55s ease;
-}
-
-.reveal.in {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-}
-
-/* Glitch */
-.glitch {
-  position: relative;
-  text-shadow: 0 0 20px rgba(0, 229, 255, 0.12);
-}
-
-.glitch::before,
-.glitch::after {
-  content: attr(data-text);
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 100%;
-  opacity: 0.45;
-  clip-path: inset(0 0 0 0);
-  pointer-events: none;
-}
-
-.glitch::before {
-  transform: translate(1px, 0);
-  color: var(--cyan);
-  animation: glitch1 2.8s infinite linear;
-}
-
-.glitch::after {
-  transform: translate(-1px, 0);
-  color: var(--mag);
-  animation: glitch2 3.4s infinite linear;
-}
-
-@keyframes glitch1 {
-
-  0%,
-  100% {
-    clip-path: inset(0 0 92% 0);
-    opacity: 0;
+  function syncToggleUI() {
+    if (arcadeBtn) {
+      arcadeBtn.setAttribute("aria-pressed", arcadeMode ? "true" : "false");
+      arcadeBtn.textContent = `ARCADE: ${arcadeMode ? "ON" : "OFF"}`;
+    }
+    if (sfxBtn) {
+      sfxBtn.setAttribute("aria-pressed", sfxOn ? "true" : "false");
+      sfxBtn.textContent = `SFX: ${sfxOn ? "ON" : "OFF"}`;
+    }
+    if (musicBtn) {
+      musicBtn.setAttribute("aria-pressed", musicOn ? "true" : "false");
+      musicBtn.textContent = `MUSIC: ${musicOn ? "ON" : "OFF"}`;
+    }
+    root.dataset.arcade = arcadeMode ? "1" : "0";
+    root.dataset.fx = "1";
   }
 
-  10% {
-    clip-path: inset(0 0 60% 0);
-    opacity: 0.45;
-  }
+  syncToggleUI();
 
-  11% {
-    clip-path: inset(30% 0 35% 0);
-  }
+  arcadeBtn?.addEventListener("click", () => {
+    arcadeMode = !arcadeMode;
+    lsSet(LS.ARCADE_ON, arcadeMode ? "1" : "0");
+    syncToggleUI();
+    unlock("arcade", "Arcade Mode", arcadeMode ? "Enabled." : "Disabled.");
+    bleep(520, 0.05, "sawtooth", 0.8);
+    applyMusicState();
+  });
 
-  12% {
-    clip-path: inset(70% 0 10% 0);
-    opacity: 0;
-  }
+  sfxBtn?.addEventListener("click", () => {
+    sfxOn = !sfxOn;
+    lsSet(LS.SFX_ON, sfxOn ? "1" : "0");
+    syncToggleUI();
+    if (sfxOn) {
+      ensureAudio();
+      bleep(740, 0.06, "square", 1.0);
+      bleep(990, 0.06, "square", 0.95);
+    }
+  });
 
-  50% {
-    clip-path: inset(10% 0 55% 0);
-    opacity: 0.4;
-  }
+  musicBtn?.addEventListener("click", () => {
+    musicOn = !musicOn;
+    lsSet(LS.MUSIC_ON, musicOn ? "1" : "0");
+    syncToggleUI();
+    unlock("music_toggle", "Music", musicOn ? "Enabled." : "Disabled.");
+    bgmUnlocked = true;
+    applyMusicState();
+  });
+})();
 
-  51% {
-    clip-path: inset(55% 0 15% 0);
-    opacity: 0;
+/* ---------- Muzzle ---------- */
+function muzzleFlash(x, y) {
+  if (!muzzle || !fxHigh) return;
+  muzzle.style.left = x + "px";
+  muzzle.style.top = y + "px";
+  muzzle.classList.remove("fire");
+  void muzzle.offsetWidth;
+  muzzle.classList.add("fire");
+}
+
+/* ---------- Shatter effect ---------- */
+let shardLayer = null;
+function ensureShardLayer() {
+  if (shardLayer) return shardLayer;
+  shardLayer = document.createElement("div");
+  shardLayer.className = "shard-layer";
+  document.body.appendChild(shardLayer);
+  return shardLayer;
+}
+
+function shatterAt(x, y, count = 18) {
+  const layer = ensureShardLayer();
+
+  const pickColor = () => {
+    const r = Math.random();
+    if (r < 0.7) {
+      const neutrals = [
+        "rgba(245,247,250,.95)",
+        "rgba(210,218,228,.95)",
+        "rgba(160,170,182,.90)",
+        "rgba(90,98,110,.85)",
+        "rgba(35,40,48,.80)",
+      ];
+      return neutrals[(Math.random() * neutrals.length) | 0];
+    }
+    if (r < 0.9) return "rgba(245,247,250,.95)";
+    if (r < 0.97) return "rgba(0,229,255,.55)";
+    return "rgba(255,43,214,.40)";
+  };
+
+  const mobile = isMobileNow();
+  const removeAfter = mobile ? 650 : 1000;
+
+  for (let i = 0; i < count; i++) {
+    const s = document.createElement("i");
+    s.className = "shard";
+    s.style.left = x + "px";
+    s.style.top = y + "px";
+
+    const w = 4 + Math.random() * 10;
+    const h = 3 + Math.random() * 9;
+    s.style.width = w.toFixed(1) + "px";
+    s.style.height = h.toFixed(1) + "px";
+    s.style.borderRadius = (Math.random() < 0.55 ? 1 : 3) + "px";
+
+    const c = pickColor();
+    s.style.background = c;
+
+    const isBright = c.includes("245,247,250") || c.includes("210,218,228");
+    s.style.boxShadow = isBright ? "0 0 10px rgba(255,255,255,.22)" : "0 0 8px rgba(0,0,0,.16)";
+
+    const ang = Math.random() * Math.PI * 2;
+    const dist = 26 + Math.random() * 90;
+    const dx = Math.cos(ang) * dist;
+    const dy = Math.sin(ang) * dist;
+    const rot = (Math.random() * 720 - 360) + "deg";
+
+    s.animate(
+      [
+        { transform: "translate(-50%, -50%) scale(1)", opacity: 1, filter: mobile ? "none" : "blur(0px)" },
+        { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) rotate(${rot}) scale(.75)`, opacity: 0, filter: mobile ? "none" : "blur(.2px)" },
+      ],
+      { duration: 520 + Math.random() * 320, easing: "cubic-bezier(.2,.9,.2,1)", fill: "forwards" }
+    );
+
+    layer.appendChild(s);
+    setTimeout(() => s.remove(), removeAfter);
   }
 }
 
-@keyframes glitch2 {
+function pointsPopupAt(x, y, text, { ms = 1100, opacity = 0.92 } = {}) {
+  const el = document.createElement("div");
+  el.className = "points-pop";
+  el.textContent = text;
 
-  0%,
-  100% {
-    clip-path: inset(0 0 90% 0);
-    opacity: 0;
+  Object.assign(el.style, {
+    position: "fixed",
+    left: x + "px",
+    top: y + "px",
+    transform: "translate(-50%, -50%)",
+    pointerEvents: "none",
+    zIndex: 100000,
+  });
+
+  document.body.appendChild(el);
+
+  el.animate(
+    [
+      { transform: "translate(-50%, -50%) translateY(0px) scale(1)", opacity },
+      { transform: "translate(-50%, -50%) translateY(-18px) scale(1.03)", opacity: 0 },
+    ],
+    { duration: ms, easing: "cubic-bezier(.2,.9,.2,1)", fill: "forwards" }
+  );
+
+  setTimeout(() => el.remove(), ms + 80);
+}
+
+function centerOfEl(el) {
+  const r = el.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+}
+
+/* ---------- Resume click achievement ---------- */
+$$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
+  a.addEventListener("click", () => unlock("resume_open", "Paper Trail", "Opened the resume."), { passive: true });
+});
+
+/* ---------- Tiles: unlock logic (scoring: bullseye=250, body=125) ---------- */
+(() => {
+  const tiles = $$(".tile");
+
+  const isPinnedOpen = (tile) =>
+    tile?.classList.contains("hero-main") || tile?.dataset.subject === "Summary";
+
+  function setPanelHeights(tile) {
+    const panel = tile.querySelector(".panel");
+    if (!panel) return;
+
+    const prev = panel.style.maxHeight;
+    panel.style.maxHeight = "none";
+    const h = Math.ceil(panel.scrollHeight);
+    panel.style.maxHeight = prev;
+
+    tile.style.setProperty("--panel-open", h + "px");
   }
 
-  20% {
-    clip-path: inset(40% 0 40% 0);
-    opacity: 0.4;
+  const measureAll = () => tiles.forEach(setPanelHeights);
+
+  function unlockFromMainTarget(btn) {
+    const tile = btn.closest(".tile");
+
+    if (!tile || isPinnedOpen(tile)) return;
+    if (tile.classList.contains("unlocked")) return;
+
+    setPanelHeights(tile);
+    void tile.offsetHeight;
+
+    tile.classList.remove("locked");
+    tile.classList.add("unlocked");
+    void tile.offsetHeight;
+
+    btn.setAttribute("aria-expanded", "true");
+
+    if (tile.id === "resume") {
+      const wrap = $("#resumePreviewWrap");
+      if (wrap) {
+        wrap.classList.add("expanded");
+        wrap.classList.remove("collapsed");
+      }
+      window.dispatchEvent(new Event("scroll"));
+    }
+
+    const subject = tile.dataset.subject || tile.id || "Section";
+    const achKey = "target_" + (tile.id || Math.random().toString(16).slice(2));
+
+    unlock(achKey, "Section Opened", subject, { silent: true });
+
+    tile.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  21% {
-    clip-path: inset(65% 0 18% 0);
-    opacity: 0;
+  function toggleResumePreview(btn) {
+    const wrap = $("#resumePreviewWrap");
+    if (!wrap) return;
+
+    const isExpanded = wrap.classList.toggle("expanded");
+    wrap.classList.toggle("collapsed", !isExpanded);
+
+    btn.setAttribute("aria-expanded", isExpanded ? "true" : "false");
+
+    const sub = btn.querySelector(".target-sub");
+    if (sub) sub.textContent = isExpanded ? "Shoot to collapse" : "Shoot to expand";
+
+    window.dispatchEvent(new Event("scroll"));
+
+    const tile = btn.closest(".tile");
+    if (tile) setPanelHeights(tile);
   }
 
-  64% {
-    clip-path: inset(25% 0 52% 0);
-    opacity: 0.35;
+  measureAll();
+  window.addEventListener("load", () => { measureAll(); requestAnimationFrame(measureAll); }, { passive: true });
+  window.addEventListener("resize", measureAll, { passive: true });
+
+  // Click scoring for big targets (main + preview)
+  document.addEventListener("click", (e) => {
+    const t = e.target instanceof Element ? e.target : null;
+    if (!t) return;
+
+    const btn = t.closest(".target");
+    if (!btn) return;
+
+    function isBullseyeHitInTarget(btn, clientX, clientY) {
+      const bull = btn.querySelector(".bullseye");
+      const r = (bull || btn).getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const dx = clientX - cx;
+      const dy = clientY - cy;
+      const bullR = 13;
+      return (dx * dx + dy * dy) <= (bullR * bullR);
+    }
+
+    const isBullseye = isBullseyeHitInTarget(btn, e.clientX, e.clientY);
+
+    const SECTION_BULL = 250;
+    const SECTION_BODY = 125;
+    const amt = isBullseye ? SECTION_BULL : SECTION_BODY;
+
+    const anchor = btn.querySelector(".bullseye") || btn;
+    const p = centerOfEl(anchor);
+
+    // Preview target: expand/collapse
+    if (btn.dataset.action === "resumeExpand") {
+      addPoints(amt);
+      pointsPopupAt(p.x, p.y, `+${amt}`, { opacity: 0.92, ms: 1100 });
+      shatterAt(p.x, p.y, isMobileNow() ? 5 : 18);
+      playBreakAudio();
+      return toggleResumePreview(btn);
+    }
+
+    // Main target: unlock
+    if (btn.classList.contains("main-target")) {
+      const tile = btn.closest(".tile");
+      if (!tile || tile.classList.contains("unlocked")) return;
+
+      addPoints(amt);
+      pointsPopupAt(p.x, p.y, `+${amt}`, { opacity: 0.92, ms: 1100 });
+      shatterAt(p.x, p.y, isMobileNow() ? 5 : 18);
+      playBreakAudio();
+
+      return unlockFromMainTarget(btn);
+    }
+  }, { passive: true });
+
+  // Shoot-anywhere feature (kept): still requires hitting a .target element.
+  // NOTE: This awards no points; points come from actual clicks on the target button.
+  function shootAt(x, y) {
+    bleep(180, 0.035, "square", 1.0);
+    bleep(90, 0.02, "sine", 0.7);
+
+    const sx = reticle ? parseFloat(reticle.style.left) || x : x;
+    const sy = reticle ? parseFloat(reticle.style.top) || y : y;
+
+    muzzleFlash(sx, sy);
+
+    const stack = document.elementsFromPoint(x, y);
+    const hitTarget = stack.find((n) => n instanceof Element && n.classList?.contains("target"));
+    if (!hitTarget) return;
+
+    if (hitTarget.dataset.action === "resumeExpand") return toggleResumePreview(hitTarget);
+    if (hitTarget.classList.contains("main-target")) return unlockFromMainTarget(hitTarget);
   }
 
-  65% {
-    clip-path: inset(52% 0 28% 0);
-    opacity: 0;
-  }
-}
+  document.addEventListener("pointerdown", (e) => {
+    const el = e.target instanceof Element ? e.target : null;
+    if (!el) return;
 
-/* Toggles */
-.toggle {
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  padding: 10px 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.04);
-  color: inherit;
-  cursor: pointer;
-}
+    if (el.closest(".target")) return;
+    if (el.closest(".topbar, footer, a, button, .btn, .card, .card *, input, textarea, select")) return;
 
-.toggle.primary {
-  border-color: rgba(0, 229, 255, 0.28);
-  box-shadow: 0 0 26px rgba(0, 229, 255, 0.08);
-}
+    shootAt(e.clientX, e.clientY);
+  }, { passive: false });
 
-/* XP bar */
-.xp {
-  position: fixed;
-  left: 0;
-  right: 0;
-  top: 0;
-  height: 4px;
-  z-index: 1000;
-  background: rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(10px);
-}
+  window.addEventListener("keydown", (e) => {
+    if (e.code !== "Space" && e.code !== "Enter") return;
+    e.preventDefault();
+    shootAt(Math.round(innerWidth / 2), Math.round(innerHeight / 2));
+  });
+})();
 
-.xp-fill {
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, var(--cyan), var(--mag), var(--acid));
-  box-shadow: 0 0 18px rgba(0, 229, 255, 0.35);
-}
+/* ---------- Hamburger nav ---------- */
+(() => {
+  const navMenu = $("#navMenu");
+  const panel = $("#navMenu .nav-panel");
+  if (!navMenu || !panel) return;
 
-/* Boot overlay */
-.boot {
-  position: fixed;
-  inset: 0;
-  z-index: 2000;
-  display: grid;
-  place-items: center;
-  background:
-    radial-gradient(900px 500px at 50% 40%, rgba(0, 229, 255, 0.12), transparent 60%),
-    radial-gradient(800px 500px at 60% 55%, rgba(255, 43, 214, 0.10), transparent 60%),
-    rgba(5, 2, 10, 0.92);
-  backdrop-filter: blur(10px);
-}
+  const items = [
+    { label: "Summary", sel: "#summary" },
+    { label: "Profile", sel: "#about" },
+    { label: "Projects", sel: "#projects" },
+    { label: "Resume", sel: "#resume" },
+    { label: "Contact", sel: "#contact" },
+  ];
 
-.boot-panel {
-  width: min(720px, calc(100% - 48px));
-  border-radius: 18px;
-  border: 1px solid rgba(0, 229, 255, 0.28);
-  background: rgba(255, 255, 255, 0.04);
-  box-shadow: 0 30px 120px rgba(0, 0, 0, 0.75);
-  padding: 22px 20px;
-  position: relative;
-  overflow: hidden;
-}
+  panel.innerHTML = items
+    .map((i) => `<button class="nav-link" type="button" data-target="${i.sel}">${i.label}</button>`)
+    .join("");
 
-.boot-panel::before {
-  content: "";
-  position: absolute;
-  inset: -2px;
-  background: linear-gradient(120deg,
-      transparent,
-      rgba(0, 229, 255, 0.22),
-      rgba(255, 43, 214, 0.16),
-      rgba(183, 255, 0, 0.12),
-      transparent);
-  filter: blur(16px);
-  opacity: 0.9;
-  animation: sweep 2.2s linear infinite;
-  pointer-events: none;
-}
+  panel.querySelectorAll(".nav-link").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const sel = btn.getAttribute("data-target") || "";
+      document.querySelector(sel)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      navMenu.open = false;
+    });
+  });
 
-@keyframes sweep {
-  0% {
-    transform: translateX(-35%);
-  }
+  document.addEventListener("pointerdown", (e) => {
+    if (!navMenu.open) return;
+    const t = e.target instanceof Element ? e.target : null;
+    if (!t) return;
+    if (t.closest("#navMenu")) return;
+    navMenu.open = false;
+  }, { capture: true });
 
-  100% {
-    transform: translateX(35%);
-  }
-}
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") navMenu.open = false;
+  });
+})();
 
-/* FX canvas */
-.fx {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  pointer-events: none;
-}
+/* ---------- Game Targets (Option A: mobile OR no-side-space = no spawn + hide layer) ---------- */
+(() => {
+  const layer = $("#gameLayer");
+  if (!layer) return;
 
-/* Reticle */
-.reticle {
-  position: fixed;
-  width: 26px;
-  height: 26px;
-  border: 1px solid rgba(0, 229, 255, 0.55);
-  border-radius: 50%;
-  box-shadow: 0 0 18px rgba(0, 229, 255, 0.22);
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-  z-index: 999;
-  mix-blend-mode: screen;
-}
+  // "OFF" means: no targets + hide layer (mobile, touch, portrait monitor, narrow layout...)
+  const isOffLayout = () => isMobileNow();
 
-.reticle::before,
-.reticle::after {
-  content: "";
-  position: absolute;
-  inset: -6px;
-  border: 1px dashed rgba(255, 43, 214, 0.35);
-  border-radius: 50%;
-  animation: spin 6s linear infinite;
-  opacity: 0.8;
-}
+  let offActive = false;
 
-.reticle::after {
-  inset: -12px;
-  border-color: rgba(183, 255, 0, 0.25);
-  animation-duration: 10s;
-  opacity: 0.55;
-}
+  // ✅ desktop perf cfg
+  const getCfg = () => ({
+    MIN: 5,
+    MAX: 10,
+    FPS: 60,
+    SIZE: 54,
+    PAD: 10,
+    POINTS_PER_HIT: 100, // bullseye points; body is half
+  });
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
+  const arcadeMotionEnabled = () => arcadeMode; // when ON layout, arcadeMode controls motion
 
-@media (max-width: 980px) {
-  .reticle {
-    display: none;
-  }
-}
+  let cachedBlocks = [];
+  let blocksDirty = true;
 
-/* Muzzle flash */
-.muzzle {
-  position: fixed;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 1200;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.95), rgba(0, 229, 255, 0.55), transparent 70%);
-  box-shadow: 0 0 22px rgba(0, 229, 255, 0.55), 0 0 34px rgba(255, 43, 214, 0.35);
-  transform: translate(-50%, -50%) scale(1);
-  opacity: 0;
-}
+  let ents = [];
+  let raf = null;
+  let last = 0;
+  let lastFrameTime = 0;
+  let frameCount = 0;
 
-.muzzle.fire {
-  opacity: 1;
-  animation: muzzlePop 140ms ease-out forwards;
-}
+  let targetGoal = 0;
+  let respawnRAF = null;
+  let enforceRAF = null;
 
-@keyframes muzzlePop {
-  0% {
-    transform: translate(-50%, -50%) scale(0.7);
-    opacity: 1;
+  const randInt = (a, b) => Math.floor(a + Math.random() * (b - a + 1));
+  const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
+
+  function viewportInfo() {
+    const vv = window.visualViewport;
+    const w = vv?.width ?? innerWidth;
+    const h = vv?.height ?? innerHeight;
+    const ox = vv?.offsetLeft ?? 0;
+    const oy = vv?.offsetTop ?? 0;
+    return { w, h, ox, oy };
   }
 
-  100% {
-    transform: translate(-50%, -50%) scale(1.6);
-    opacity: 0;
-  }
-}
-
-/* Toasts */
-.toast {
-  position: fixed;
-  right: 18px;
-  bottom: 18px;
-  z-index: 1500;
-  display: grid;
-  gap: 10px;
-  width: min(360px, calc(100% - 36px));
-}
-
-/* Panels */
-.tile {
-  --panel-open: 900px;
-}
-
-.panel {
-  overflow: hidden;
-  max-height: 0;
-  opacity: 0;
-  pointer-events: none;
-  transition:
-    max-height var(--openMs) var(--panelEase),
-    opacity 500ms ease;
-}
-
-.tile.unlocked .panel {
-  max-height: var(--panel-open);
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.tile.unlocked .target.main-target {
-  display: none;
-}
-
-.tile.locked .target.main-target {
-  display: grid;
-}
-
-.tile.section-card {
-  padding: 20px;
-}
-
-.tile.section-card.locked {
-  padding: 0 !important;
-}
-
-.tile.section-card.unlocked {
-  padding: 20px !important;
-}
-
-/* Subtargets (preview) use the same bullseye size as main targets */
-.tile .target.subtarget .bullseye {
-  width: 54px;
-  height: 54px;
-  margin: 0;
-}
-
-/* Ensure the button itself is relative */
-.target.main-target,
-.target.subtarget {
-  position: relative;
-  overflow: visible;
-}
-
-/* Bullseye styling: always centered inside the button */
-.target.main-target .bullseye,
-.target.subtarget .bullseye {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 54px;
-  height: 54px;
-  border-radius: 999px;
-  background:
-    radial-gradient(circle at 50% 50%,
-      rgba(15, 15, 15, 0.95) 0 6px,
-      rgba(245, 245, 245, 0.95) 6px 10px,
-      rgba(190, 30, 30, 0.92) 10px 16px,
-      rgba(245, 245, 245, 0.92) 16px 22px,
-      rgba(25, 25, 25, 0.88) 22px 27px);
-  border: 2px solid rgba(240, 240, 240, 0.65);
-  box-shadow:
-    0 16px 55px rgba(0, 0, 0, 0.55),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.35);
-  z-index: 1;
-  cursor: crosshair;
-}
-
-.target.subtarget.preview .bullseye {
-  display: block !important;
-}
-
-.target.main-target .target-label,
-.target.main-target .target-sub,
-.target.subtarget .target-label,
-.target.subtarget .target-sub {
-  position: relative;
-  z-index: 2;
-  pointer-events: none;
-}
-
-/* Target button */
-.target {
-  width: 100%;
-  min-height: var(--targetH);
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(10, 16, 24, 0.55);
-  color: inherit;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-  gap: 6px;
-  padding: 18px;
-  position: relative;
-  overflow: hidden;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-}
-
-/* Remove the subtle grey silhouette overlay on the big target rectangles */
-.target::before {
-  display: none !important;
-}
-
-/* Big targets: whole box is clickable (body=125), bullseye is just visually/interaction special */
-.target.main-target,
-.target.subtarget {
-  cursor: pointer;
-}
-
-/* Keep labels non-interactive so clicks feel like they hit the target, not the text */
-.target.main-target .target-label,
-.target.main-target .target-sub,
-.target.subtarget .target-label,
-.target.subtarget .target-sub {
-  pointer-events: none;
-}
-
-/* Bullseye remains the obvious click zone */
-.target.main-target .bullseye,
-.target.subtarget .bullseye {
-  cursor: crosshair;
-}
-
-.target.main-target:hover .bullseye,
-.target.subtarget:hover .bullseye {
-  box-shadow:
-    0 16px 55px rgba(0, 0, 0, 0.55),
-    0 0 22px rgba(0, 229, 255, 0.20),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.35);
-}
-
-.target-label {
-  font-weight: 900;
-  font-size: 1.1rem;
-}
-
-.target-sub {
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 0.85rem;
-  opacity: 0.75;
-  letter-spacing: 0.08em;
-}
-
-.target.subtarget {
-  min-height: var(--targetH);
-  margin-top: 12px;
-  border-radius: 16px;
-}
-
-/* Resume preview */
-.resume-preview {
-  margin-top: 14px;
-  border-radius: 14px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(10, 16, 24, 0.45);
-}
-
-.resume-preview.collapsed {
-  height: 0;
-  border-width: 0;
-  margin-top: 0;
-}
-
-.resume-preview.expanded {
-  height: calc(100vh - 170px);
-  max-height: 980px;
-}
-
-@media (max-width: 720px) {
-  .resume-preview.expanded {
-    height: calc(100vh - 210px);
-    max-height: none;
-  }
-}
-
-.resume-object {
-  width: 100%;
-  height: 100%;
-  border: 0;
-  display: block;
-  background: rgba(0, 0, 0, 0.2);
-}
-
-/* Points UI */
-.points {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(10, 16, 24, 0.55);
-  margin-left: 10px;
-}
-
-.points-label {
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 0.8rem;
-  letter-spacing: 0.14em;
-  opacity: 0.75;
-}
-
-.points-value {
-  font-weight: 900;
-  font-size: 1.05rem;
-}
-
-.points-pop {
-  position: fixed;
-  pointer-events: none;
-  z-index: 100000;
-
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-weight: 950;
-  font-size: 18px;
-  letter-spacing: 0.08em;
-
-  padding: 6px 10px;
-  border-radius: 999px;
-
-  color: rgba(255, 255, 255, .92);
-  background: rgba(0, 0, 0, .35);
-  border: 1px solid rgba(0, 229, 255, .28);
-
-  box-shadow:
-    0 14px 40px rgba(0, 0, 0, .55),
-    0 0 18px rgba(0, 229, 255, .18);
-
-  text-transform: uppercase;
-}
-
-/* HUD Targets (hidden on small screens) */
-.targets-hud {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1200;
-}
-
-.hud-target {
-  pointer-events: auto;
-  position: absolute;
-  padding: 10px 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(10, 16, 24, 0.55);
-  color: rgba(255, 255, 255, 0.92);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 12px;
-  letter-spacing: 0.10em;
-  text-transform: uppercase;
-  cursor: pointer;
-  user-select: none;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-
-@media (max-width: 980px) {
-  #targetsHud {
-    display: none;
-  }
-}
-
-/* Game targets */
-.game-layer {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1190;
-}
-
-.game-target {
-  pointer-events: auto;
-  position: absolute;
-  width: 54px;
-  height: 54px;
-  border-radius: 999px;
-  cursor: crosshair;
-  user-select: none;
-  background:
-    radial-gradient(circle at 50% 50%,
-      rgba(15, 15, 15, 0.95) 0 6px,
-      rgba(245, 245, 245, 0.95) 6px 10px,
-      rgba(190, 30, 30, 0.92) 10px 16px,
-      rgba(245, 245, 245, 0.92) 16px 22px,
-      rgba(25, 25, 25, 0.88) 22px 27px);
-  border: 2px solid rgba(240, 240, 240, 0.65);
-  box-shadow:
-    0 16px 55px rgba(0, 0, 0, 0.55),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.35);
-}
-
-.game-target::after {
-  content: "";
-  position: absolute;
-  inset: 6px;
-  border-radius: 999px;
-  background:
-    linear-gradient(to right,
-      transparent 0 48%,
-      rgba(0, 0, 0, 0.35) 48% 52%,
-      transparent 52% 100%),
-    linear-gradient(to bottom,
-      transparent 0 48%,
-      rgba(0, 0, 0, 0.35) 48% 52%,
-      transparent 52% 100%);
-  opacity: 0.55;
-  pointer-events: none;
-}
-
-.game-target.hit {
-  opacity: 0;
-  transform: scale(0.7);
-  transition: opacity 240ms ease, transform 240ms ease;
-}
-
-/* Settings dropdown */
-.topbar-right {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.settings {
-  position: relative;
-}
-
-.settings-menu {
-  position: relative;
-}
-
-.settings-menu>summary {
-  list-style: none;
-}
-
-.settings-menu>summary::-webkit-details-marker {
-  display: none;
-}
-
-.settings-summary {
-  user-select: none;
-}
-
-.settings-panel {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 10px);
-  min-width: 220px;
-  display: grid;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(10, 6, 18, 0.78);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: 0 26px 90px rgba(0, 0, 0, 0.7);
-  z-index: 2000;
-}
-
-.icon-btn {
-  width: 48px;
-  height: 48px;
-  padding: 0;
-  display: inline-grid;
-  place-items: center;
-  border-radius: 14px;
-  line-height: 1;
-}
-
-.settings-summary.icon-btn>span {
-  font-size: 22px;
-  line-height: 1;
-  display: block;
-}
-
-#pointsResetBtn {
-  min-width: 78px;
-}
-
-/* Shatter effect */
-.shard-layer {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 99999;
-}
-
-.shard {
-  position: fixed;
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  background: rgba(245, 247, 250, 0.95);
-  box-shadow: 0 0 8px rgba(0, 0, 0, 0.18);
-  will-change: transform, opacity;
-}
-
-/* Mobile optimization (same UI, just clearer layout) */
-@media (max-width: 720px) {
-  .container {
-    width: min(var(--max), calc(100% - 24px));
+  function worldBounds(cfg) {
+    const { w, h, ox, oy } = viewportInfo();
+    return { l: cfg.PAD + ox, t: cfg.PAD + oy, r: ox + w - cfg.PAD, b: oy + h - cfg.PAD };
   }
 
-  .topbar-inner {
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 0;
+  const candidateRect = (cfg, x, y) => ({ l: x, t: y, r: x + cfg.SIZE, b: y + cfg.SIZE });
+
+  function computeProtectedRects() {
+    const blocks = [];
+    const { w: vw, h: vh, ox, oy } = viewportInfo();
+    const view = { l: ox, t: oy, r: ox + vw, b: oy + vh };
+
+    const pushIfVisible = (el, pad) => {
+      if (!el) return;
+      const r = rectOf(el);
+      const rw = r.r - r.l;
+      const rh = r.b - r.t;
+      if (rw <= 10 || rh <= 10) return;
+      if (!intersects(r, view)) return;
+      blocks.push(expandRect(r, pad));
+    };
+
+    $$(".tile.locked .target.main-target").forEach((t) => pushIfVisible(t, 10));
+    pushIfVisible($(".topbar"), 6);
+    pushIfVisible($("footer .container"), 8);
+    $$(".tile.unlocked .panel").forEach((p) => pushIfVisible(p, 8));
+
+    const resumeWrap = $("#resumePreviewWrap");
+    if (resumeWrap?.classList.contains("expanded")) pushIfVisible(resumeWrap, 8);
+
+    const settingsPanel = $("#settingsMenu[open] .settings-panel");
+    pushIfVisible(settingsPanel, 8);
+
+    if (toastHost) pushIfVisible(toastHost, 8);
+
+    return blocks.filter((r) => {
+      const rw = Math.max(0, r.r - r.l);
+      const rh = Math.max(0, r.b - r.t);
+      return !(rw > vw * 0.98 && rh > vh * 0.9);
+    });
   }
 
-  .brand {
-    min-width: 0;
-    flex: 1 1 auto;
+  function overlapsLiveTargets(cfg, rr) {
+    for (const e of ents) {
+      if (!e.alive) continue;
+      if (intersects(rr, candidateRect(cfg, e.x, e.y))) return true;
+    }
+    return false;
   }
 
-  .topbar-right {
-    width: 100%;
-    justify-content: flex-start;
-    flex-wrap: wrap;
-    gap: 8px;
+  function isValidSpawn(cfg, bounds, blocks, x, y) {
+    const rr = candidateRect(cfg, x, y);
+    if (rr.l < bounds.l || rr.t < bounds.t || rr.r > bounds.r || rr.b > bounds.b) return false;
+    if (blocks.some((b) => intersects(rr, b))) return false;
+    if (overlapsLiveTargets(cfg, rr)) return false;
+    return true;
   }
 
-  .points {
-    margin-left: 0;
+  function pickSpawnPoint(cfg, bounds, blocks) {
+    const maxX = Math.max(bounds.l, bounds.r - cfg.SIZE);
+    const maxY = Math.max(bounds.t, bounds.b - cfg.SIZE);
+
+    for (let tries = 0; tries < 1400; tries++) {
+      const x = randInt(bounds.l, maxX);
+      const y = randInt(bounds.t, maxY);
+      if (isValidSpawn(cfg, bounds, blocks, x, y)) return { x, y };
+    }
+    return null;
   }
 
-  .hero {
-    padding: 18px 0 26px;
+  function setPos(ent) {
+    ent.el.style.transform = `translate(${ent.x}px, ${ent.y}px)`;
   }
 
-  .bento {
-    gap: 12px;
+  function giveVelocity(ent) {
+    const baseSpeed = 180;
+    const speed = baseSpeed + Math.random() * 140;
+    const ang = Math.random() * Math.PI * 2;
+    ent.vx = Math.cos(ang) * speed;
+    ent.vy = Math.sin(ang) * speed;
   }
 
-  .hero-main {
-    padding: 16px;
-    padding-bottom: 22px;
-    transform: none;
+  function reflectVelocity(ent, nx, ny) {
+    const vdot = ent.vx * nx + ent.vy * ny;
+    ent.vx = ent.vx - 2 * vdot * nx;
+    ent.vy = ent.vy - 2 * vdot * ny;
   }
 
-  .section-card {
-    padding: 16px;
+  function rectOverlapDepth(a, b) {
+    const left = a.r - b.l;
+    const right = b.r - a.l;
+    const top = a.b - b.t;
+    const bottom = b.b - a.t;
+    return { left, right, top, bottom };
   }
 
-  .cta .btn {
-    flex: 1 1 auto;
+  function resolveAgainstBlocks(ent, blocks, bounds, cfg) {
+    if (!blocks.length) return;
+
+    for (let iter = 0; iter < 5; iter++) {
+      const rr = candidateRect(cfg, ent.x, ent.y);
+      const hit = blocks.find((b) => intersects(rr, b));
+      if (!hit) return;
+
+      const d = rectOverlapDepth(rr, hit);
+
+      let dx = -d.left, dy = 0, min = d.left;
+      if (d.right < min) { min = d.right; dx = d.right; dy = 0; }
+      if (d.top < min) { min = d.top; dx = 0; dy = -d.top; }
+      if (d.bottom < min) { min = d.bottom; dx = 0; dy = d.bottom; }
+
+      const eps = 0.75;
+      if (dx !== 0) ent.x += dx + Math.sign(dx) * eps;
+      if (dy !== 0) ent.y += dy + Math.sign(dy) * eps;
+
+      let nx = 0, ny = 0;
+      if (dx !== 0) nx = Math.sign(dx);
+      else ny = Math.sign(dy);
+
+      reflectVelocity(ent, nx, ny);
+
+      ent.x = clamp(ent.x, bounds.l, bounds.r - ent.w);
+      ent.y = clamp(ent.y, bounds.t, bounds.b - ent.h);
+    }
   }
 
-  h1 {
-    font-size: 20px;
-    line-height: 1.25;
+  const aliveCount = () => ents.reduce((n, e) => n + (e.alive ? 1 : 0), 0);
+
+  function start() {
+    stop();
+    last = performance.now();
+    raf = requestAnimationFrame(tick);
   }
 
-  h2 {
-    font-size: 16px;
+  function stop() {
+    if (raf) cancelAnimationFrame(raf);
+    raf = null;
   }
 
-  .target {
-    padding: 16px;
-    min-height: 108px;
+  function clearAll() {
+    stop();
+    if (respawnRAF) cancelAnimationFrame(respawnRAF);
+    if (enforceRAF) cancelAnimationFrame(enforceRAF);
+    respawnRAF = null;
+    enforceRAF = null;
+    ents = [];
+    layer.innerHTML = "";
   }
 
-  .target-label {
-    font-size: 1rem;
+  // Geometric bullseye hit-test for floating targets
+  function isBullseyeHitPoint(btn, clientX, clientY) {
+    const r = btn.getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    const dx = clientX - cx;
+    const dy = clientY - cy;
+
+    // Bullseye radius in px (tweak 12–16 depending on strictness)
+    const bullR = 13;
+    return (dx * dx + dy * dy) <= (bullR * bullR);
   }
 
-  .target-sub {
-    font-size: 0.82rem;
+  function hit(ent, { bullseye = false } = {}) {
+    if (!ent.alive) return;
+    ent.alive = false;
+
+    const cfg = getCfg();
+    const amt = bullseye ? cfg.POINTS_PER_HIT : Math.floor(cfg.POINTS_PER_HIT / 2);
+
+    addPoints(amt);
+
+    const r = ent.el.getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    pointsPopupAt(cx, cy, `+${amt}`, { opacity: 0.92, ms: 1100 });
+
+    shatterAt(cx, cy, 22);
+    playBreakAudio();
+
+    ent.el.classList.add("hit");
+    setTimeout(() => {
+      try { ent.el.remove(); } catch { }
+      ents = ents.filter((x) => x !== ent);
+      scheduleRespawn();
+    }, 260);
   }
 
-  .resume-preview.expanded {
-    height: min(62vh, 520px);
+  function enforceNoCollisions() {
+    if (offActive) return;
+
+    const cfg = getCfg();
+    const bounds = worldBounds(cfg);
+    const blocks = computeProtectedRects();
+
+    for (const e of ents) {
+      if (!e.alive) continue;
+
+      if (!arcadeMotionEnabled()) {
+        e.vx = 0;
+        e.vy = 0;
+        e.x = clamp(e.x, bounds.l, bounds.r - e.w);
+        e.y = clamp(e.y, bounds.t, bounds.b - e.h);
+      } else {
+        resolveAgainstBlocks(e, blocks, bounds, cfg);
+      }
+      setPos(e);
+    }
   }
 
-  .toast {
-    right: 12px;
-    left: 12px;
-    width: auto;
-    bottom: 12px;
+  function fillToGoal() {
+    if (offActive) return;
+
+    const cfg = getCfg();
+    const bounds = worldBounds(cfg);
+    const blocks = computeProtectedRects();
+
+    while (aliveCount() < targetGoal) {
+      const p = pickSpawnPoint(cfg, bounds, blocks);
+      if (!p) break;
+
+      const el = document.createElement("button");
+      el.type = "button";
+      el.className = "game-target";
+      el.setAttribute("aria-label", "Target");
+      layer.appendChild(el);
+
+      const ent = { el, alive: true, x: p.x, y: p.y, vx: 0, vy: 0, w: cfg.SIZE, h: cfg.SIZE };
+      if (arcadeMotionEnabled()) giveVelocity(ent);
+
+      setPos(ent);
+      ents.push(ent);
+    }
   }
 
-  /* easier to tap targets on phones */
-  .game-target {
-    width: 54px;
-    height: 54px;
-    border-radius: 999px;
-    cursor: crosshair;
-    user-select: none;
-    background:
-      radial-gradient(circle at 50% 50%,
-        rgba(20, 22, 26, 0.95) 0 6px,
-        rgba(235, 235, 235, 0.95) 6px 10px,
-        rgba(200, 30, 30, 0.92) 10px 16px,
-        rgba(235, 235, 235, 0.92) 16px 22px,
-        rgba(25, 25, 25, 0.88) 22px 27px);
-    border: 2px solid rgba(240, 240, 240, 0.65);
-    box-shadow:
-      0 16px 55px rgba(0, 0, 0, 0.55),
-      inset 0 0 0 1px rgba(0, 0, 0, 0.35);
-    display: block;
+  function scheduleRespawn() {
+    if (offActive) return;
+    if (respawnRAF) return;
+    respawnRAF = requestAnimationFrame(() => {
+      respawnRAF = null;
+      enforceNoCollisions();
+      fillToGoal();
+    });
   }
-}
 
-/* =========================
-   Milestone Toast (HUD)
-========================= */
+  function spawnInitialWave() {
+    clearAll();
+    if (offActive) return;
 
-#milestoneToast{
-  position: fixed !important;
-  left: 50% !important;
-  top: 38% !important;              /* slightly above center */
-  transform: translate(-50%, -50%) !important;
+    const cfg = getCfg();
+    targetGoal = randInt(cfg.MIN, cfg.MAX);
 
-  z-index: 4000 !important;
-  width: min(620px, calc(100% - 28px)) !important;
-  display: grid !important;
-  gap: 10px !important;
-  pointer-events: none;
-}
+    fillToGoal();
+    enforceNoCollisions();
+    fillToGoal();
 
-#milestoneToast .t{
-  pointer-events: auto;
+    start();
+  }
 
-  padding: 14px 16px;
-  border-radius: 16px;
+  function tick(t) {
+    if (offActive) return;
 
-  border: 1px solid rgba(0,229,255,.30);
-  background: rgba(5, 2, 10, 0.78);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+    const cfg = getCfg();
+    const interval = 1000 / cfg.FPS;
 
-  box-shadow:
-    0 26px 90px rgba(0,0,0,.75),
-    0 0 26px rgba(0,229,255,.12);
-}
+    if (t - lastFrameTime < interval) {
+      raf = requestAnimationFrame(tick);
+      return;
+    }
+    lastFrameTime = t;
 
-#milestoneToast .t .title{
-  font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 13px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  opacity: 0.9;
-  margin-bottom: 6px;
-}
+    const dt = Math.min(0.033, (t - last) / 1000);
+    last = t;
 
-#milestoneToast .t .msg{
-  font-size: 16px;                   /* bigger */
-  font-weight: 800;
-  color: rgba(255,255,255,0.95);
-  line-height: 1.25;
-}
+    if (!arcadeMotionEnabled()) {
+      raf = requestAnimationFrame(tick);
+      return;
+    }
 
-#milestoneToast .t .bar{
-  margin-top: 10px;
-  height: 4px;
-  background: rgba(255,255,255,0.10);
-  border-radius: 999px;
-  overflow: hidden;
-}
+    frameCount++;
 
-#milestoneToast .t .bar i{
-  display: block;
-  height: 100%;
-  width: 100%;
-  background: linear-gradient(90deg, var(--cyan), var(--mag), var(--acid));
-  transform-origin: left;
-  animation: msbar 5.2s linear forwards;
-}
+    const bounds = worldBounds(cfg);
 
-@keyframes msbar{
-  from { transform: scaleX(1); }
-  to   { transform: scaleX(0); }
-}
+    const refreshEvery = 3;
+    if (frameCount % refreshEvery === 0 || blocksDirty) {
+      cachedBlocks = computeProtectedRects();
+      blocksDirty = false;
+    }
+    const blocks = cachedBlocks;
+
+    for (const e of ents) {
+      if (!e.alive) continue;
+
+      e.x += e.vx * dt;
+      e.y += e.vy * dt;
+
+      if (e.x <= bounds.l) { e.x = bounds.l; if (e.vx < 0) e.vx = -e.vx; }
+      else if (e.x + e.w >= bounds.r) { e.x = bounds.r - e.w; if (e.vx > 0) e.vx = -e.vx; }
+
+      if (e.y <= bounds.t) { e.y = bounds.t; if (e.vy < 0) e.vy = -e.vy; }
+      else if (e.y + e.h >= bounds.b) { e.y = bounds.b - e.h; if (e.vy > 0) e.vy = -e.vy; }
+
+      if (blocks.length) resolveAgainstBlocks(e, blocks, bounds, cfg);
+
+      setPos(e);
+    }
+
+    raf = requestAnimationFrame(tick);
+  }
+
+  // Pointer handler (will early-out when offActive)
+  document.addEventListener("pointerdown", (e) => {
+    if (offActive) return;
+
+    const el = e.target instanceof Element ? e.target : null;
+    if (el && el.closest(".topbar, footer, a, button:not(.game-target):not(.target), .btn, .card, .card *, input, textarea, select")) {
+      return;
+    }
+
+    const stack = document.elementsFromPoint(e.clientX, e.clientY);
+    const btn = stack.find((n) => n instanceof Element && n.classList?.contains("game-target"));
+    if (!btn) return;
+
+    const ent = ents.find((en) => en.el === btn);
+    if (!ent) return;
+
+    const bull = isBullseyeHitPoint(btn, e.clientX, e.clientY);
+    hit(ent, { bullseye: bull });
+
+    e.preventDefault();
+    e.stopPropagation();
+  }, { capture: true, passive: false });
+
+  function scheduleEnforce() {
+    if (offActive) return;
+    if (enforceRAF) return;
+    enforceRAF = requestAnimationFrame(() => {
+      enforceRAF = null;
+      if (offActive) return;
+      blocksDirty = true;
+      enforceNoCollisions();
+      scheduleRespawn();
+    });
+  }
+
+  const onLayoutChange = () => {
+    if (offActive) return;     // ✅ critical: ignore scroll/resize when OFF
+    if (!arcadeMode) return;
+    blocksDirty = true;
+    scheduleEnforce();
+  };
+
+  const vv = window.visualViewport;
+
+  function addLayoutListeners() {
+    window.addEventListener("scroll", onLayoutChange, { passive: true });
+    window.addEventListener("resize", onLayoutChange, { passive: true });
+    vv?.addEventListener("resize", onLayoutChange, { passive: true });
+    vv?.addEventListener("scroll", onLayoutChange, { passive: true });
+    window.addEventListener("orientationchange", onOrient, { passive: true });
+  }
+
+  function removeLayoutListeners() {
+    window.removeEventListener("scroll", onLayoutChange, { passive: true });
+    window.removeEventListener("resize", onLayoutChange, { passive: true });
+    vv?.removeEventListener("resize", onLayoutChange, { passive: true });
+    vv?.removeEventListener("scroll", onLayoutChange, { passive: true });
+    window.removeEventListener("orientationchange", onOrient, { passive: true });
+  }
+
+  function onOrient() { setTimeout(onLayoutChange, 250); }
+
+  const mo = new MutationObserver(() => {
+    arcadeMode = root.dataset.arcade === "1";
+    applyMusicState();
+
+    if (offActive) return;
+
+    if (arcadeMotionEnabled()) {
+      ents.forEach((e) => { if (e.alive && e.vx === 0 && e.vy === 0) giveVelocity(e); });
+      start();
+    } else {
+      ents.forEach((e) => { e.vx = 0; e.vy = 0; setPos(e); });
+      if (!raf) start();
+    }
+
+    scheduleEnforce();
+  });
+  mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-arcade"] });
+
+  // ✅ Dynamic enable/disable when layout changes (mobile <-> desktop, portrait <-> landscape, etc.)
+  function reconcileOffLayout() {
+    const shouldOff = isOffLayout();
+
+    if (shouldOff === offActive) {
+      // still update CSS state (e.g. aria/display) just in case
+      layer.style.display = shouldOff ? "none" : "";
+      layer.toggleAttribute("aria-hidden", shouldOff);
+      return;
+    }
+
+    offActive = shouldOff;
+
+    layer.style.display = offActive ? "none" : "";
+    layer.toggleAttribute("aria-hidden", offActive);
+
+    if (offActive) {
+      removeLayoutListeners();   // ✅ stop expensive work
+      clearAll();
+    } else {
+      addLayoutListeners();      // ✅ resume only when on
+      spawnInitialWave();
+      scheduleEnforce();
+    }
+  }
+
+  // init
+  reconcileOffLayout();
+  if (!offActive) {
+    addLayoutListeners();
+    spawnInitialWave();
+  }
+
+  // watch for changes
+  mqMobile.addEventListener?.("change", reconcileOffLayout);
+  window.addEventListener("resize", reconcileOffLayout, { passive: true });
+  window.visualViewport?.addEventListener("resize", reconcileOffLayout, { passive: true });
+  window.visualViewport?.addEventListener("scroll", reconcileOffLayout, { passive: true });
+  window.addEventListener("orientationchange", () => setTimeout(reconcileOffLayout, 250), { passive: true });
+})();
