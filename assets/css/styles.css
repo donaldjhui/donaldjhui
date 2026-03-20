@@ -1313,52 +1313,48 @@ footer {
 #milestoneToast{
   position: fixed !important;
   left: 50% !important;
-  top: 38% !important;              /* slightly above center */
+  top: 38% !important;
+  right: auto !important;
+  bottom: auto !important;
   transform: translate(-50%, -50%) !important;
 
-  z-index: 4000 !important;
-  width: min(620px, calc(100% - 28px)) !important;
+  z-index: 3000 !important;
+  width: min(560px, calc(100% - 28px)) !important;
+
   display: grid !important;
   gap: 10px !important;
   pointer-events: none;
 }
+#milestoneToast .t{ pointer-events: auto; }
 
 #milestoneToast .t{
-  pointer-events: auto;
-
-  padding: 14px 16px;
-  border-radius: 16px;
-
-  border: 1px solid rgba(0,229,255,.30);
-  background: rgba(5, 2, 10, 0.78);
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(10, 16, 24, 0.78);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-
-  box-shadow:
-    0 26px 90px rgba(0,0,0,.75),
-    0 0 26px rgba(0,229,255,.12);
+  box-shadow: 0 26px 90px rgba(0,0,0,0.7);
 }
 
 #milestoneToast .t .title{
   font-family: "JetBrains Mono", ui-monospace, monospace;
-  font-size: 13px;
-  letter-spacing: 0.14em;
+  font-size: 12px;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  opacity: 0.9;
-  margin-bottom: 6px;
+  opacity: 0.85;
+  margin-bottom: 4px;
 }
 
 #milestoneToast .t .msg{
-  font-size: 16px;                   /* bigger */
-  font-weight: 800;
-  color: rgba(255,255,255,0.95);
-  line-height: 1.25;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.92);
 }
 
 #milestoneToast .t .bar{
-  margin-top: 10px;
-  height: 4px;
-  background: rgba(255,255,255,0.10);
+  margin-top: 8px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.10);
   border-radius: 999px;
   overflow: hidden;
 }
