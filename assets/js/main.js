@@ -105,6 +105,7 @@ const LS = Object.freeze({
   ARCADE_ON: "arcadeOn",
   ACH: "achievements_v3",
   MILESTONE: "points_milestone_v1",
+  POINTS: "points_total_v1",
 });
 
 let arcadeMode = (lsGet(LS.ARCADE_ON) ?? "0") === "1"; // default OFF
@@ -152,7 +153,7 @@ function unlock(key, title, msg, { silent = false } = {}) {
   return true;
 }
 
-/* ---------- Points (reset every load) ---------- */
+/* ---------- Points (persist across pages) ---------- */
 let points = 0;
 const pointsEl = $("#pointsValue");
 function renderPoints() { if (pointsEl) pointsEl.textContent = String(points); }
@@ -230,6 +231,7 @@ function checkPointMilestone() {
 
 function addPoints(n) {
   points = Math.max(0, points + n);
+  lsSet(LS.POINTS, String(points));   // ✅ persist across pages
   renderPoints();
   checkPointMilestone();
 }
@@ -241,12 +243,20 @@ function awardPoints(amount, title = "POINTS", msg = "", { toastMs = 5000 } = {}
 
 function resetPoints() {
   points = 0;
+  lsSet(LS.POINTS, "0");            // ✅ persist reset
   renderPoints();
   lastMilestone = 0;
   lsSet(LS.MILESTONE, "0");
 }
 
-resetPoints();
+// Load saved points (multi-page persistent)
+{
+  const saved = parseInt(lsGet(LS.POINTS) || "0", 10);
+  points = Number.isFinite(saved) ? saved : 0;
+  renderPoints();
+  checkPointMilestone();
+}
+
 $("#pointsResetBtn")?.addEventListener("click", resetPoints);
 
 /* ---------- XP bar ---------- */
@@ -741,6 +751,11 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
     const hitTarget = stack.find((n) => n instanceof Element && n.classList?.contains("target"));
     if (!hitTarget) return;
 
+    if (hitTarget.classList.contains("nav-target")) {
+      hitTarget.click();
+      return;
+    }
+
     if (hitTarget.dataset.action === "resumeExpand") return toggleResumePreview(hitTarget);
     if (hitTarget.classList.contains("main-target")) return unlockFromMainTarget(hitTarget);
   }
@@ -762,29 +777,84 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
   });
 })();
 
-/* ---------- Hamburger nav ---------- */
+/* ---------- Hamburger nav (shootable page targets) ---------- */
 (() => {
   const navMenu = $("#navMenu");
   const panel = $("#navMenu .nav-panel");
   if (!navMenu || !panel) return;
 
+  const NAV_BULL = 250;
+  const NAV_BODY = 125;
+
   const items = [
-    { label: "Summary", sel: "#summary" },
-    { label: "Profile", sel: "#about" },
-    { label: "Projects", sel: "#projects" },
-    { label: "Resume", sel: "#resume" },
-    { label: "Contact", sel: "#contact" },
+    { label: "Summary", href: "index.html" },
+    { label: "Profile", href: "profile.html" },
+    { label: "Projects", href: "projects.html" },
+    { label: "Resume", href: "resume.html" },
+    { label: "Contact", href: "contact.html" },
   ];
 
-  panel.innerHTML = items
-    .map((i) => `<button class="nav-link" type="button" data-target="${i.sel}">${i.label}</button>`)
-    .join("");
+  panel.innerHTML = items.map((i) => `
+    <button class="nav-link target nav-target" type="button" data-href="${i.href}">
+      <span class="bullseye" aria-hidden="true"></span>
+      ${i.label}
+    </button>
+  `).join("");
 
-  panel.querySelectorAll(".nav-link").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const sel = btn.getAttribute("data-target") || "";
-      document.querySelector(sel)?.scrollIntoView({ behavior: "smooth", block: "start" });
-      navMenu.open = false;
+  function hitZone(btn, clientX, clientY) {
+    const bull = btn.querySelector(".bullseye");
+    if (!bull) return "none";
+
+    const r = bull.getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+    const dx = clientX - cx;
+    const dy = clientY - cy;
+    const d2 = dx * dx + dy * dy;
+
+    // Scale radii based on the bullseye element size
+    const innerR = r.width * 0.35; // bullseye
+    const outerR = r.width * 0.62; // body ring area around it
+
+    if (d2 <= innerR * innerR) return "bull";
+    if (d2 <= outerR * outerR) return "body";
+    return "none";
+  }
+
+  function awardNavPoints(btn, clientX, clientY) {
+    const zone = hitZone(btn, clientX, clientY);
+    if (zone === "none") return "none";
+
+    const amt = zone === "bull" ? NAV_BULL : NAV_BODY;
+    addPoints(amt);
+
+    const bull = btn.querySelector(".bullseye");
+    const br = (bull || btn).getBoundingClientRect();
+    const x = br.left + br.width / 2;
+    const y = br.top + br.height / 2;
+
+    pointsPopupAt(x, y, `+${amt}`, { opacity: 0.92, ms: 900 });
+    shatterAt(x, y, isMobileNow() ? 5 : 14);
+    playBreakAudio();
+
+    return zone; // "bull" | "body"
+  }
+
+  function navigate(btn) {
+    const href = btn.getAttribute("data-href");
+    if (!href) return;
+    navMenu.open = false;
+    window.location.href = href;
+  }
+
+  panel.querySelectorAll(".nav-target").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      const ev = e instanceof MouseEvent ? e : null;
+      const x = ev?.clientX ?? (btn.getBoundingClientRect().left + 20);
+      const y = ev?.clientY ?? (btn.getBoundingClientRect().top + btn.getBoundingClientRect().height / 2);
+
+      awardNavPoints(btn, x, y);
+      navigate(btn);
     });
   });
 
@@ -801,27 +871,26 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
   });
 })();
 
-/* ---------- Game Targets (Option A: mobile OR no-side-space = no spawn + hide layer) ---------- */
+/* ---------- Game Targets (Arena under content; medium density scales with #gameLayer size) ---------- */
 (() => {
   const layer = $("#gameLayer");
   if (!layer) return;
 
-  // "OFF" means: no targets + hide layer (mobile, touch, portrait monitor, narrow layout...)
-  const isOffLayout = () => isMobileNow();
+  // Arena is always ON (you can change this later if you want)
+  const isOffLayout = () => false;
 
+  let initialized = false;
   let offActive = false;
 
-  // ✅ desktop perf cfg
+  // ✅ perf/game cfg
   const getCfg = () => ({
-    MIN: 5,
-    MAX: 10,
     FPS: 60,
     SIZE: 54,
     PAD: 10,
     POINTS_PER_HIT: 100, // bullseye points; body is half
   });
 
-  const arcadeMotionEnabled = () => arcadeMode; // when ON layout, arcadeMode controls motion
+  const arcadeMotionEnabled = () => arcadeMode; // when ON, arcadeMode controls motion
 
   let cachedBlocks = [];
   let blocksDirty = true;
@@ -839,55 +908,38 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
   const randInt = (a, b) => Math.floor(a + Math.random() * (b - a + 1));
   const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
 
-  function viewportInfo() {
-    const vv = window.visualViewport;
-    const w = vv?.width ?? innerWidth;
-    const h = vv?.height ?? innerHeight;
-    const ox = vv?.offsetLeft ?? 0;
-    const oy = vv?.offsetTop ?? 0;
-    return { w, h, ox, oy };
-  }
-
+  // Layer-relative bounds (arena coordinates)
   function worldBounds(cfg) {
-    const { w, h, ox, oy } = viewportInfo();
-    return { l: cfg.PAD + ox, t: cfg.PAD + oy, r: ox + w - cfg.PAD, b: oy + h - cfg.PAD };
+    return {
+      l: cfg.PAD,
+      t: cfg.PAD,
+      r: layer.clientWidth - cfg.PAD,
+      b: layer.clientHeight - cfg.PAD,
+    };
   }
 
   const candidateRect = (cfg, x, y) => ({ l: x, t: y, r: x + cfg.SIZE, b: y + cfg.SIZE });
 
-  function computeProtectedRects() {
-    const blocks = [];
-    const { w: vw, h: vh, ox, oy } = viewportInfo();
-    const view = { l: ox, t: oy, r: ox + vw, b: oy + vh };
+  // Arena is separate, so no protected UI blocks are needed
+  function computeProtectedRects() { return []; }
 
-    const pushIfVisible = (el, pad) => {
-      if (!el) return;
-      const r = rectOf(el);
-      const rw = r.r - r.l;
-      const rh = r.b - r.t;
-      if (rw <= 10 || rh <= 10) return;
-      if (!intersects(r, view)) return;
-      blocks.push(expandRect(r, pad));
-    };
+  // Medium density scaling based on arena area
+  function calcTargetGoal(cfg) {
+    const w = layer.clientWidth || 0;
+    const h = layer.clientHeight || 0;
+    const area = Math.max(1, w * h);
 
-    $$(".tile.locked .target.main-target").forEach((t) => pushIfVisible(t, 10));
-    pushIfVisible($(".topbar"), 6);
-    pushIfVisible($("footer .container"), 8);
-    $$(".tile.unlocked .panel").forEach((p) => pushIfVisible(p, 8));
+    // density knob (medium): ~1 target per (SIZE*2.25)^2 area
+    const spacing = cfg.SIZE * 2.25;
+    const cellArea = spacing * spacing;
 
-    const resumeWrap = $("#resumePreviewWrap");
-    if (resumeWrap?.classList.contains("expanded")) pushIfVisible(resumeWrap, 8);
+    const ideal = Math.round(area / cellArea);
 
-    const settingsPanel = $("#settingsMenu[open] .settings-panel");
-    pushIfVisible(settingsPanel, 8);
+    // clamp for sanity
+    const min = 4;
+    const max = 18;
 
-    if (toastHost) pushIfVisible(toastHost, 8);
-
-    return blocks.filter((r) => {
-      const rw = Math.max(0, r.r - r.l);
-      const rh = Math.max(0, r.b - r.t);
-      return !(rw > vw * 0.98 && rh > vh * 0.9);
-    });
+    return clamp(ideal, min, max);
   }
 
   function overlapsLiveTargets(cfg, rr) {
@@ -1005,7 +1057,6 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
     const dx = clientX - cx;
     const dy = clientY - cy;
 
-    // Bullseye radius in px (tweak 12–16 depending on strictness)
     const bullR = 13;
     return (dx * dx + dy * dy) <= (bullR * bullR);
   }
@@ -1097,7 +1148,7 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
     if (offActive) return;
 
     const cfg = getCfg();
-    targetGoal = randInt(cfg.MIN, cfg.MAX);
+    targetGoal = calcTargetGoal(cfg);
 
     fillToGoal();
     enforceNoCollisions();
@@ -1157,7 +1208,7 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
     raf = requestAnimationFrame(tick);
   }
 
-  // Pointer handler (will early-out when offActive)
+  // Pointer handler
   document.addEventListener("pointerdown", (e) => {
     if (offActive) return;
 
@@ -1193,8 +1244,13 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
   }
 
   const onLayoutChange = () => {
-    if (offActive) return;     // ✅ critical: ignore scroll/resize when OFF
+    if (offActive) return;
     if (!arcadeMode) return;
+
+    // keep target count proportional as the arena changes size
+    targetGoal = calcTargetGoal(getCfg());
+    scheduleRespawn();
+
     blocksDirty = true;
     scheduleEnforce();
   };
@@ -1237,27 +1293,34 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
   });
   mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-arcade"] });
 
-  // ✅ Dynamic enable/disable when layout changes (mobile <-> desktop, portrait <-> landscape, etc.)
   function reconcileOffLayout() {
     const shouldOff = isOffLayout();
 
+    // If state didn't change, still need a first-time init
     if (shouldOff === offActive) {
-      // still update CSS state (e.g. aria/display) just in case
       layer.style.display = shouldOff ? "none" : "";
       layer.toggleAttribute("aria-hidden", shouldOff);
+
+      if (!shouldOff && !initialized) {
+        initialized = true;
+        addLayoutListeners();
+        spawnInitialWave();
+        scheduleEnforce();
+      }
       return;
     }
 
+    initialized = true;
     offActive = shouldOff;
 
     layer.style.display = offActive ? "none" : "";
     layer.toggleAttribute("aria-hidden", offActive);
 
     if (offActive) {
-      removeLayoutListeners();   // ✅ stop expensive work
+      removeLayoutListeners();
       clearAll();
     } else {
-      addLayoutListeners();      // ✅ resume only when on
+      addLayoutListeners();
       spawnInitialWave();
       scheduleEnforce();
     }
@@ -1265,10 +1328,6 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
 
   // init
   reconcileOffLayout();
-  if (!offActive) {
-    addLayoutListeners();
-    spawnInitialWave();
-  }
 
   // watch for changes
   mqMobile.addEventListener?.("change", reconcileOffLayout);
