@@ -1,5 +1,6 @@
 <!doctype html>
 <html lang="en">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -7,19 +8,16 @@
   <title>Donald Hui | Field Services Technician</title>
 
   <link rel="icon" href="./assets/img/Me.jpg" type="image/jpeg" />
-
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap"
-    rel="stylesheet"
-  />
+    rel="stylesheet" />
 
   <link rel="stylesheet" href="./assets/css/styles.css" />
 </head>
 
 <body id="top">
-  <!-- Boot overlay -->
   <div id="boot" class="boot">
     <div class="boot-panel">
       <div class="boot-title">SYSTEM BOOT</div>
@@ -29,39 +27,28 @@
     </div>
   </div>
 
-  <!-- XP bar -->
   <div class="xp" aria-hidden="true">
     <div class="xp-fill" id="xpFill"></div>
   </div>
-
-  <!-- FX canvas for particles -->
   <canvas id="fx" class="fx" aria-hidden="true"></canvas>
-
-  <!-- Reticle cursor + muzzle -->
   <div class="reticle" aria-hidden="true"></div>
   <div class="muzzle" aria-hidden="true" id="muzzle"></div>
-
-  <!-- Achievements / toasts -->
   <div id="toast" class="toast" aria-live="polite" aria-atomic="true"></div>
 
-  <!-- Background layers -->
   <div class="aurora" aria-hidden="true"></div>
   <div class="noise" aria-hidden="true"></div>
   <div class="vignette" aria-hidden="true"></div>
 
-  <!-- Topbar -->
   <header class="topbar" id="siteTopbar">
     <div class="container topbar-inner">
       <details id="navMenu" class="nav-menu">
         <summary class="toggle icon-btn nav-summary" aria-label="Open navigation">
           <span aria-hidden="true">☰</span>
         </summary>
-        <div class="nav-panel" role="navigation" aria-label="Site navigation">
-          <!-- JS populates -->
-        </div>
+        <div class="nav-panel" role="navigation" aria-label="Site navigation"></div>
       </details>
 
-      <a class="brand" href="#summary" aria-label="Home">
+      <a class="brand" href="index.html" aria-label="Home">
         <img class="avatar" src="./assets/img/Me.jpg" alt="Donald Hui" />
         <div class="brand-title">
           <strong>Donald Hui</strong>
@@ -82,7 +69,6 @@
             <summary class="toggle settings-summary icon-btn" aria-label="Open settings">
               <span aria-hidden="true">⚙</span>
             </summary>
-
             <div class="settings-panel" role="group" aria-label="Settings">
               <button class="toggle" id="sfxToggle" type="button" aria-pressed="false">SFX: ON</button>
               <button class="toggle" id="musicToggle" type="button" aria-pressed="false">MUSIC: ON</button>
@@ -95,191 +81,24 @@
   </header>
 
   <main>
-    <section id="summary" class="container hero">
+    <section class="container hero">
       <div class="bento">
-        <!-- SUMMARY (always visible) -->
-        <section class="tile hero-main reveal unlocked" aria-label="Summary" data-subject="Summary">
-          <div class="panel" id="summaryPanel">
-            <div class="kicker"><span class="pulse"></span> Bay Area • IT Field Services • Software background</div>
-
-            <h1 class="glitch" data-text="Fast, reliable support—crafted like a production system.">
-              Fast, reliable support—crafted like a production system.
-            </h1>
-
-            <div class="section-head" style="margin-top: 14px;">
-              <h2 style="margin: 0;">Summary</h2>
-              <p class="tagline">summary.read()</p>
-            </div>
-
-            <p class="subtitle">
-              Field Service Technician with enterprise IT experience in healthcare and biotech. I specialize in
-              deployments, troubleshooting, patching, and reliable end‑user support—bringing a software background
-              that helps me automate, document, and improve workflows.
-            </p>
+        <section id="summary" class="tile section-card reveal unlocked" style="grid-column: span 12;"
+          data-subject="Summary">
+          <div class="section-head">
+            <h2>Summary</h2>
+            <p class="tagline">summary.read()</p>
           </div>
-        </section>
 
-        <!-- PROFILE -->
-        <section id="about" class="tile section-card reveal locked" style="grid-column: span 12;" data-subject="Profile">
-          <button class="target main-target" type="button" aria-controls="aboutPanel" aria-expanded="false">
-            <span class="bullseye"></span>
-            <span class="target-label">PROFILE</span>
-            <br /><br />
-            <span class="target-sub">Shoot to reveal</span>
-          </button>
+          <p class="p" style="margin-bottom: 14px;">
+            Fast, reliable support—crafted like a production system.
+          </p>
 
-          <div class="panel" id="aboutPanel">
-            <div class="panel-inner">
-              <div class="section-head">
-                <h2>Profile</h2>
-                <p class="tagline">profile.read()</p>
-              </div>
-              <p class="p">
-                I’m a UC Santa Cruz (Class of 2020) Computer Science graduate with a mix of hands‑on enterprise IT
-                support and software engineering experience. I work best in fast-paced environments where clear
-                communication, strong troubleshooting, and clean documentation matter. Outside of work, I’ve played
-                piano since age five and enjoy weight training and bouldering.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <!-- PROJECTS -->
-        <section
-          id="projects"
-          class="tile section-card reveal locked"
-          style="grid-column: span 12;"
-          data-subject="Projects"
-        >
-          <button class="target main-target" type="button" aria-controls="projectsPanel" aria-expanded="false">
-            <span class="bullseye"></span>
-            <span class="target-label">PROJECTS</span>
-            <br /><br />
-            <span class="target-sub">Shoot to reveal</span>
-          </button>
-
-          <div class="panel" id="projectsPanel">
-            <div class="panel-inner">
-              <div class="section-head">
-                <h2>Projects</h2>
-                <p class="tagline">projects.load()</p>
-              </div>
-
-              <p class="p" style="margin-bottom: 14px;">
-                Selected work and links—showing how I approach tooling, automation, and practical problem‑solving.
-              </p>
-
-              <div class="grid">
-                <article class="card" data-href="https://github.com/donaldjhui">
-                  <h3>GitHub Portfolio</h3>
-                  <p>A curated set of repositories, experiments, and contributions.</p>
-                  <div class="chips">
-                    <span class="chip">python</span>
-                    <span class="chip">js</span>
-                    <span class="chip">automation</span>
-                  </div>
-                  <a class="link" href="https://github.com/donaldjhui" target="_blank" rel="noopener">
-                    View GitHub <span class="arrow">→</span>
-                  </a>
-                </article>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- RESUME -->
-        <section id="resume" class="tile section-card reveal locked" style="grid-column: span 12;" data-subject="Resume">
-          <button class="target main-target" type="button" aria-controls="resumePanel" aria-expanded="false">
-            <span class="bullseye"></span>
-            <span class="target-label">RESUME</span>
-            <br /><br />
-            <span class="target-sub">Shoot to reveal</span>
-          </button>
-
-          <div class="panel" id="resumePanel">
-            <div class="panel-inner">
-              <div class="section-head">
-                <h2>Resume</h2>
-                <p class="tagline">resume.open()</p>
-              </div>
-
-              <button
-                class="target subtarget preview"
-                type="button"
-                aria-controls="resumePreviewWrap"
-                aria-expanded="true"
-                data-action="resumeExpand"
-              >
-                <span class="bullseye"></span>
-                <span class="target-label">PREVIEW</span>
-                <br /><br />
-                <span class="target-sub">Shoot to collapse</span>
-              </button>
-
-              <div class="resume-preview expanded" id="resumePreviewWrap">
-                <iframe
-                  class="resume-object"
-                  src="./assets/docs/Donald_Hui_Resume.pdf#view=FitH"
-                  title="Resume preview"
-                  loading="lazy"
-                ></iframe>
-
-                <p class="p" style="margin-top: 10px;">
-                  If the preview doesn’t load on your device,
-                  <a
-                    href="./assets/docs/Donald_Hui_Resume.pdf"
-                    target="_blank"
-                    rel="noopener"
-                    style="text-decoration: underline;"
-                  >open the PDF</a>.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- CONTACT -->
-        <section
-          id="contact"
-          class="tile section-card reveal locked"
-          style="grid-column: span 12;"
-          data-subject="Contact"
-        >
-          <button class="target main-target" type="button" aria-controls="contactPanel" aria-expanded="false">
-            <span class="bullseye"></span>
-            <span class="target-label">CONTACT</span>
-            <br /><br />
-            <span class="target-sub">Shoot to reveal</span>
-          </button>
-
-          <div class="panel" id="contactPanel">
-            <div class="panel-inner">
-              <div class="section-head">
-                <h2>Contact</h2>
-                <p class="tagline">contact.send()</p>
-              </div>
-
-              <p class="p">
-                Best way to reach me:
-                <a href="mailto:donaldjhui@gmail.com" style="text-decoration: underline;">donaldjhui@gmail.com</a>
-              </p>
-
-              <p class="p" style="margin-top: 10px;">
-                LinkedIn:
-                <a
-                  href="https://linkedin.com/in/donald-hui/"
-                  target="_blank"
-                  rel="noopener"
-                  style="text-decoration: underline;"
-                >linkedin.com/in/donald-hui</a>
-              </p>
-
-              <div class="cta" style="margin-top: 14px;">
-                <a class="btn primary" href="mailto:donaldjhui@gmail.com">Email Me</a>
-                <a class="btn ghost" href="https://linkedin.com/in/donald-hui/" target="_blank" rel="noopener">LinkedIn</a>
-              </div>
-            </div>
-          </div>
+          <p class="p">
+            Field Service Technician with enterprise IT experience in healthcare and biotech. I specialize in
+            deployments, troubleshooting, patching, and reliable end‑user support—bringing a software background
+            that helps me automate, document, and improve workflows.
+          </p>
         </section>
       </div>
     </section>
@@ -290,12 +109,9 @@
         <div>&copy; <span id="year"></span> Donald Hui. All Rights Reserved.</div>
       </div>
     </footer>
+    <div id="gameLayer" class="game-layer" aria-hidden="true"></div>
   </main>
 
-  <!-- Game Targets (shooting only) -->
-  <div id="gameLayer" class="game-layer" aria-hidden="true"></div>
-
-  <!-- Background music -->
   <audio id="bgmAmbient" preload="auto" loop>
     <source src="./assets/audio/bgm_ambient.mp3" type="audio/mpeg" />
     <source src="./assets/audio/bgm_ambient.ogg" type="audio/ogg" />
@@ -308,4 +124,5 @@
 
   <script defer src="./assets/js/main.js"></script>
 </body>
+
 </html>

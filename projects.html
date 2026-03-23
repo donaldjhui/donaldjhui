@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noarchive" />
+    <title>Donald Hui | Projects</title>
+
+    <link rel="icon" href="./assets/img/Me.jpg" type="image/jpeg" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap"
+        rel="stylesheet" />
+
+    <link rel="stylesheet" href="./assets/css/styles.css" />
+</head>
+
+<body id="top">
+    <div id="boot" class="boot">
+        <div class="boot-panel">
+            <div class="boot-title">SYSTEM BOOT</div>
+            <div class="boot-sub">Initializing UI • Loading modules • Calibrating neon</div>
+            <div class="boot-bar"><span class="boot-fill"></span></div>
+            <div class="boot-hint">Press anywhere to skip</div>
+        </div>
+    </div>
+
+    <div class="xp" aria-hidden="true">
+        <div class="xp-fill" id="xpFill"></div>
+    </div>
+    <canvas id="fx" class="fx" aria-hidden="true"></canvas>
+    <div class="reticle" aria-hidden="true"></div>
+    <div class="muzzle" aria-hidden="true" id="muzzle"></div>
+    <div id="toast" class="toast" aria-live="polite" aria-atomic="true"></div>
+
+    <div class="aurora" aria-hidden="true"></div>
+    <div class="noise" aria-hidden="true"></div>
+    <div class="vignette" aria-hidden="true"></div>
+
+    <header class="topbar" id="siteTopbar">
+        <div class="container topbar-inner">
+            <details id="navMenu" class="nav-menu">
+                <summary class="toggle icon-btn nav-summary" aria-label="Open navigation">
+                    <span aria-hidden="true">☰</span>
+                </summary>
+                <div class="nav-panel" role="navigation" aria-label="Site navigation"></div>
+            </details>
+
+            <a class="brand" href="index.html" aria-label="Home">
+                <img class="avatar" src="./assets/img/Me.jpg" alt="Donald Hui" />
+                <div class="brand-title">
+                    <strong>Donald Hui</strong>
+                    <span>Field Services Technician</span>
+                </div>
+            </a>
+
+            <div class="topbar-right" aria-label="Topbar controls">
+                <div class="points" aria-label="Points">
+                    <span class="points-label">POINTS</span>
+                    <span class="points-value" id="pointsValue">0</span>
+                </div>
+
+                <button class="toggle" id="pointsResetBtn" type="button">RESET</button>
+
+                <div class="settings">
+                    <details id="settingsMenu" class="settings-menu">
+                        <summary class="toggle settings-summary icon-btn" aria-label="Open settings">
+                            <span aria-hidden="true">⚙</span>
+                        </summary>
+
+                        <div class="settings-panel" role="group" aria-label="Settings">
+                            <button class="toggle" id="sfxToggle" type="button" aria-pressed="false">SFX: ON</button>
+                            <button class="toggle" id="musicToggle" type="button" aria-pressed="false">MUSIC:
+                                ON</button>
+                            <button class="toggle primary" id="arcadeToggle" type="button" aria-pressed="false">ARCADE:
+                                ON</button>
+                        </div>
+                    </details>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <section class="container hero">
+            <div class="bento">
+                <section id="projects" class="tile section-card reveal unlocked" style="grid-column: span 12;"
+                    data-subject="Projects">
+                    <div class="section-head">
+                        <h2>Projects</h2>
+                        <p class="tagline">projects.load()</p>
+                    </div>
+
+                    <p class="p" style="margin-bottom: 14px;">
+                        Selected work and links—showing how I approach tooling, automation, and practical
+                        problem‑solving.
+                    </p>
+
+                    <div class="grid">
+                        <article class="card" data-href="https://github.com/donaldjhui">
+                            <h3>GitHub Portfolio</h3>
+                            <p>A curated set of repositories, experiments, and contributions.</p>
+                            <div class="chips">
+                                <span class="chip">python</span>
+                                <span class="chip">js</span>
+                                <span class="chip">automation</span>
+                            </div>
+                            <a class="link" href="https://github.com/donaldjhui" target="_blank" rel="noopener">
+                                View GitHub <span class="arrow">→</span>
+                            </a>
+                        </article>
+                    </div>
+                </section>
+            </div>
+        </section>
+
+        <footer>
+            <div class="container">
+                <div style="margin-bottom: 6px;">This site is built using HTML, CSS, and JavaScript.</div>
+                <div>&copy; <span id="year"></span> Donald Hui. All Rights Reserved.</div>
+            </div>
+        </footer>
+        <div id="gameLayer" class="game-layer" aria-hidden="true"></div>
+    </main>
+
+    <audio id="bgmAmbient" preload="auto" loop>
+        <source src="./assets/audio/bgm_ambient.mp3" type="audio/mpeg" />
+        <source src="./assets/audio/bgm_ambient.ogg" type="audio/ogg" />
+    </audio>
+
+    <audio id="bgmArcade" preload="auto" loop>
+        <source src="./assets/audio/bgm_arcade.mp3" type="audio/mpeg" />
+        <source src="./assets/audio/bgm_arcade.ogg" type="audio/ogg" />
+    </audio>
+
+    <script defer src="./assets/js/main.js"></script>
+</body>
+
+</html>
