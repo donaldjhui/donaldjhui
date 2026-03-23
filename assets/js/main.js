@@ -923,21 +923,20 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
   // Arena is separate, so no protected UI blocks are needed
   function computeProtectedRects() { return []; }
 
-  // Medium density scaling based on arena area
   function calcTargetGoal(cfg) {
     const w = layer.clientWidth || 0;
     const h = layer.clientHeight || 0;
     const area = Math.max(1, w * h);
 
-    // density knob (medium): ~1 target per (SIZE*2.25)^2 area
-    const spacing = cfg.SIZE * 2.25;
+    // LESS frequent: bigger spacing => fewer targets
+    const spacing = cfg.SIZE * 2.8;
     const cellArea = spacing * spacing;
 
     const ideal = Math.round(area / cellArea);
 
-    // clamp for sanity
-    const min = 4;
-    const max = 18;
+    // lower caps
+    const min = 3;
+    const max = 12;
 
     return clamp(ideal, min, max);
   }
