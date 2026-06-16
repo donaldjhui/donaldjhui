@@ -108,7 +108,9 @@ const LS = Object.freeze({
   POINTS: "points_total_v1",
 });
 
-let arcadeMode = (lsGet(LS.ARCADE_ON) ?? "0") === "1"; // default OFF
+const savedArcade = lsGet(LS.ARCADE_ON);
+let arcadeMode = savedArcade == null ? true : savedArcade === "1"; // default ON for first-time visitors
+
 let sfxOn = (lsGet(LS.SFX_ON) ?? "1") === "1";         // default ON
 let musicOn = (lsGet(LS.MUSIC_ON) ?? "0") === "1";     // default OFF
 
