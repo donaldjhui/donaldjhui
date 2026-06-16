@@ -1,13 +1,15 @@
 /* =========================================================
    main.js (REFactor - drop-in)
-   PATCH (2026-06-16 + low-power hardening):
+   PATCH (2026-06-16 + low-power hardening + points expiry):
    - Arcade defaults ON for first-time visitors (no LS key)
    - Remove visualViewport.scroll listeners
    - rAF-throttle resize/orientation handlers
    - Low-power mode (Chrome portrait/narrow & reduced-motion):
        * fewer targets, lower FPS
        * fewer shards, shorter shard lifetime
-       * optional dataset hook: html[data-low-power="1"]
+       * dataset hook: html[data-low-power="1"]
+   - Points expire after 24 hours of no activity:
+       * resets points + milestone after inactivity window
 ========================================================= */
 
 (() => {
@@ -109,6 +111,44 @@ const LS = Object.freeze({
   ACH: "achievements_v3",
   MILESTONE: "points_milestone_v1",
   POINTS: "points_total_v1",
+  POINTS_LAST_ACTIVE: "points_last_active_v1", // ✅ NEW
+});
+
+/* ---------- Points expiry (24h inactivity) ---------- */
+const POINTS_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+function nowMs() { return Date.now(); }
+
+function touchPointsActivity() {
+  lsSet(LS.POINTS_LAST_ACTIVE, String(nowMs()));
+}
+
+function expirePointsStorage() {
+  lsSet(LS.POINTS, "0");
+  lsSet(LS.MILESTONE, "0");
+}
+
+function maybeExpirePoints() {
+  const last = parseInt(lsGet(LS.POINTS_LAST_ACTIVE) || "0", 10);
+
+  // First visit / no timestamp yet
+  if (!Number.isFinite(last) || last <= 0) {
+    touchPointsActivity();
+    return;
+  }
+
+  // Expire after TTL
+  if (nowMs() - last >= POINTS_TTL_MS) {
+    expirePointsStorage();
+    touchPointsActivity();
+  }
+}
+
+// Update activity when user is actually using the page
+["pointerdown", "keydown"].forEach((ev) => {
+  window.addEventListener(ev, touchPointsActivity, { passive: true });
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") touchPointsActivity();
 });
 
 // default Arcade ON for first-time visitors (no key)
@@ -161,7 +201,7 @@ let points = 0;
 const pointsEl = $("#pointsValue");
 function renderPoints() { if (pointsEl) pointsEl.textContent = String(points); }
 
-const QUOTES = [ /* (unchanged) */ 
+const QUOTES = [
   "Keep going — consistency beats intensity.",
   "You’re building momentum. Stay with it.",
   "Small wins compound. Great job.",
@@ -231,6 +271,7 @@ function checkPointMilestone() {
 }
 
 function addPoints(n) {
+  touchPointsActivity(); // ✅ NEW: scoring counts as activity
   points = Math.max(0, points + n);
   lsSet(LS.POINTS, String(points));
   renderPoints();
@@ -238,6 +279,7 @@ function addPoints(n) {
 }
 
 function resetPoints() {
+  touchPointsActivity(); // ✅ NEW
   points = 0;
   lsSet(LS.POINTS, "0");
   renderPoints();
@@ -245,6 +287,10 @@ function resetPoints() {
   lsSet(LS.MILESTONE, "0");
 }
 
+// ✅ NEW: expire before loading points
+maybeExpirePoints();
+
+// Load saved points
 {
   const saved = parseInt(lsGet(LS.POINTS) || "0", 10);
   points = Number.isFinite(saved) ? saved : 0;
@@ -507,7 +553,6 @@ function ensureShardLayer() {
 }
 
 function shatterAt(x, y, count = 18) {
-  // ✅ low power hard cap
   const low = lowPowerNow();
   const mobile = isMobileNow();
   if (low) count = Math.min(count, 6);
