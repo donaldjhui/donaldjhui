@@ -1406,3 +1406,38 @@ footer {
   from { transform: scaleX(1); }
   to   { transform: scaleX(0); }
 }
+
+/* ===== Performance patch (Chrome portrait) ===== */
+.game-layer,
+.game-target {
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+.game-layer {
+  contain: layout paint style;
+}
+
+/* Low-power mode (set by JS): fewer expensive visuals */
+html[data-low-power="1"] .reticle::before,
+html[data-low-power="1"] .reticle::after {
+  animation: none !important;
+}
+
+html[data-low-power="1"] .aurora {
+  filter: blur(18px) saturate(140%);
+  opacity: 0.75;
+}
+
+html[data-low-power="1"] .noise {
+  opacity: 0.14;
+}
+
+html[data-low-power="1"] .vignette {
+  opacity: 0.28;
+}
+
+/* Optional: reduce shard rendering cost further */
+html[data-low-power="1"] .shard {
+  box-shadow: none !important;
+}
