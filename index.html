@@ -48,7 +48,7 @@
         <div class="nav-panel" role="navigation" aria-label="Site navigation"></div>
       </details>
 
-      <a class="brand" href="index.html" aria-label="Home">
+      <a class="brand" href="#top" aria-label="Home">
         <img class="avatar" src="./assets/img/Me.jpg" alt="Donald Hui" />
         <div class="brand-title">
           <strong>Donald Hui</strong>
@@ -83,6 +83,8 @@
   <main>
     <section class="container hero">
       <div class="bento">
+
+        <!-- Summary (always visible) -->
         <section id="summary" class="tile section-card reveal unlocked" style="grid-column: span 12;"
           data-subject="Summary">
           <div class="section-head">
@@ -100,6 +102,104 @@
             that helps me automate, document, and improve workflows.
           </p>
         </section>
+
+        <!-- Profile -->
+        <section id="profile" class="tile section-card reveal unlocked" style="grid-column: span 12;"
+          data-subject="Profile">
+          <div class="section-head">
+            <h2>Profile</h2>
+            <p class="tagline">profile.read()</p>
+          </div>
+
+          <p class="p">
+            I’m a UC Santa Cruz (Class of 2020) Computer Science graduate with a mix of hands‑on enterprise IT
+            support and software engineering experience. I work best in fast-paced environments where clear
+            communication, strong troubleshooting, and clean documentation matter. Outside of work, I’ve played
+            piano since age five and enjoy weight training and bouldering.
+          </p>
+        </section>
+
+        <!-- Projects -->
+        <section id="projects" class="tile section-card reveal unlocked" style="grid-column: span 12;"
+          data-subject="Projects">
+          <div class="section-head">
+            <h2>Projects</h2>
+            <p class="tagline">projects.load()</p>
+          </div>
+
+          <p class="p" style="margin-bottom: 14px;">
+            Selected work and links—showing how I approach tooling, automation, and practical problem‑solving.
+          </p>
+
+          <div class="grid">
+            <article class="card" data-href="https://github.com/donaldjhui">
+              <h3>GitHub Portfolio</h3>
+              <p>A curated set of repositories, experiments, and contributions.</p>
+              <div class="chips">
+                <span class="chip">python</span>
+                <span class="chip">js</span>
+                <span class="chip">automation</span>
+              </div>
+              <a class="link" href="https://github.com/donaldjhui" target="_blank" rel="noopener">
+                View GitHub <span class="arrow">→</span>
+              </a>
+            </article>
+          </div>
+        </section>
+
+        <!-- Resume -->
+        <section id="resume" class="tile section-card reveal unlocked" style="grid-column: span 12;"
+          data-subject="Resume">
+          <div class="section-head">
+            <h2>Resume</h2>
+            <p class="tagline">resume.open()</p>
+          </div>
+
+          <button class="target subtarget preview" type="button" aria-controls="resumePreviewWrap"
+            aria-expanded="true" data-action="resumeExpand">
+            <span class="bullseye"></span>
+            <span class="target-label">PREVIEW</span>
+            <br /><br />
+            <span class="target-sub">Shoot to collapse</span>
+          </button>
+
+          <div class="resume-preview expanded" id="resumePreviewWrap">
+            <iframe class="resume-object" src="./assets/docs/Donald_Hui_Resume.pdf#view=FitH" title="Resume preview"
+              loading="lazy"></iframe>
+
+            <p class="p" style="margin-top: 10px;">
+              If the preview doesn’t load on your device,
+              <a href="./assets/docs/Donald_Hui_Resume.pdf" target="_blank" rel="noopener"
+                style="text-decoration: underline;">open the PDF</a>.
+            </p>
+          </div>
+        </section>
+
+        <!-- Contact (no resume pdf link here) -->
+        <section id="contact" class="tile section-card reveal unlocked" style="grid-column: span 12;"
+          data-subject="Contact">
+          <div class="section-head">
+            <h2>Contact</h2>
+            <p class="tagline">contact.send()</p>
+          </div>
+
+          <p class="p">
+            Best way to reach me:
+            <a href="mailto:donaldjhui@gmail.com" style="text-decoration: underline;">donaldjhui@gmail.com</a>
+          </p>
+
+          <p class="p" style="margin-top: 10px;">
+            LinkedIn:
+            <a href="https://linkedin.com/in/donald-hui/" target="_blank" rel="noopener"
+              style="text-decoration: underline;">linkedin.com/in/donald-hui</a>
+          </p>
+
+          <div class="cta" style="margin-top: 14px;">
+            <a class="btn primary" href="mailto:donaldjhui@gmail.com">Email Me</a>
+            <a class="btn ghost" href="https://linkedin.com/in/donald-hui/" target="_blank" rel="noopener">LinkedIn</a>
+          </div>
+        </section>
+
       </div>
     </section>
 
@@ -109,6 +209,8 @@
         <div>&copy; <span id="year"></span> Donald Hui. All Rights Reserved.</div>
       </div>
     </footer>
+
+    <!-- arena under content -->
     <div id="gameLayer" class="game-layer" aria-hidden="true"></div>
   </main>
 
