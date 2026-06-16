@@ -787,11 +787,11 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
   const NAV_BODY = 125;
 
   const items = [
-    { label: "Summary", href: "index.html" },
-    { label: "Profile", href: "profile.html" },
-    { label: "Projects", href: "projects.html" },
-    { label: "Resume", href: "resume.html" },
-    { label: "Contact", href: "contact.html" },
+    { label: "Summary", href: "#summary" },
+    { label: "Profile", href: "#profile" },
+    { label: "Projects", href: "#projects" },
+    { label: "Resume", href: "#resume" },
+    { label: "Contact", href: "#contact" },
   ];
 
   panel.innerHTML = items.map((i) => `
@@ -843,8 +843,14 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
   function navigate(btn) {
     const href = btn.getAttribute("data-href");
     if (!href) return;
+
     navMenu.open = false;
-    window.location.href = href;
+
+    const id = href.startsWith("#") ? href.slice(1) : "";
+    const el = id ? document.getElementById(id) : null;
+
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    else window.location.hash = href;
   }
 
   panel.querySelectorAll(".nav-target").forEach((btn) => {
