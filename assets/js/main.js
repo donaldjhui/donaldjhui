@@ -888,6 +888,10 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
   let initialized = false;
   let offActive = false;
 
+  // ✅ stable listener options (avoid duplicate listener edge cases)
+  const PASSIVE = { passive: true };
+  const CAPTURE_ACTIVE = { capture: true, passive: false };
+
   // ✅ perf/game cfg
   const getCfg = () => ({
     FPS: 60,
@@ -1234,7 +1238,7 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
 
     e.preventDefault();
     e.stopPropagation();
-  }, { capture: true, passive: false });
+  }, CAPTURE_ACTIVE);
 
   function scheduleEnforce() {
     if (offActive) return;
@@ -1248,7 +1252,20 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
     });
   }
 
-  const onLayoutChange = () => {
+  // ✅ rAF throttle helper (run at most once per frame)
+  function rafThrottle(fn) {
+    let scheduled = false;
+    return () => {
+      if (scheduled) return;
+      scheduled = true;
+      requestAnimationFrame(() => {
+        scheduled = false;
+        fn();
+      });
+    };
+  }
+
+  function _onLayoutChange() {
     if (offActive) return;
     if (!arcadeMode) return;
 
@@ -1258,27 +1275,30 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
 
     blocksDirty = true;
     scheduleEnforce();
-  };
+  }
+
+  // ✅ throttled version
+  const onLayoutChange = rafThrottle(_onLayoutChange);
 
   const vv = window.visualViewport;
 
+  function onOrient() {
+    // orientation can “settle” late; keep the delay but throttle the work
+    setTimeout(onLayoutChange, 250);
+  }
+
   function addLayoutListeners() {
-    window.addEventListener("scroll", onLayoutChange, { passive: true });
-    window.addEventListener("resize", onLayoutChange, { passive: true });
-    vv?.addEventListener("resize", onLayoutChange, { passive: true });
-    vv?.addEventListener("scroll", onLayoutChange, { passive: true });
-    window.addEventListener("orientationchange", onOrient, { passive: true });
+    // ✅ No scroll listeners (these are the big portrait/vertical jank source)
+    window.addEventListener("resize", onLayoutChange, PASSIVE);
+    vv?.addEventListener("resize", onLayoutChange, PASSIVE);
+    window.addEventListener("orientationchange", onOrient, PASSIVE);
   }
 
   function removeLayoutListeners() {
-    window.removeEventListener("scroll", onLayoutChange, { passive: true });
-    window.removeEventListener("resize", onLayoutChange, { passive: true });
-    vv?.removeEventListener("resize", onLayoutChange, { passive: true });
-    vv?.removeEventListener("scroll", onLayoutChange, { passive: true });
-    window.removeEventListener("orientationchange", onOrient, { passive: true });
+    window.removeEventListener("resize", onLayoutChange, PASSIVE);
+    vv?.removeEventListener("resize", onLayoutChange, PASSIVE);
+    window.removeEventListener("orientationchange", onOrient, PASSIVE);
   }
-
-  function onOrient() { setTimeout(onLayoutChange, 250); }
 
   const mo = new MutationObserver(() => {
     arcadeMode = root.dataset.arcade === "1";
@@ -1298,7 +1318,7 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
   });
   mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-arcade"] });
 
-  function reconcileOffLayout() {
+  function _reconcileOffLayout() {
     const shouldOff = isOffLayout();
 
     // If state didn't change, still need a first-time init
@@ -1331,13 +1351,16 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
     }
   }
 
+  // ✅ throttled version (prevents rapid re-entry on resize storms)
+  const reconcileOffLayout = rafThrottle(_reconcileOffLayout);
+
   // init
   reconcileOffLayout();
 
   // watch for changes
   mqMobile.addEventListener?.("change", reconcileOffLayout);
-  window.addEventListener("resize", reconcileOffLayout, { passive: true });
-  window.visualViewport?.addEventListener("resize", reconcileOffLayout, { passive: true });
-  window.visualViewport?.addEventListener("scroll", reconcileOffLayout, { passive: true });
-  window.addEventListener("orientationchange", () => setTimeout(reconcileOffLayout, 250), { passive: true });
+  window.addEventListener("resize", reconcileOffLayout, PASSIVE);
+  window.visualViewport?.addEventListener("resize", reconcileOffLayout, PASSIVE);
+  // ✅ remove vv scroll reconcile (major portrait jank source)
+  window.addEventListener("orientationchange", () => setTimeout(reconcileOffLayout, 250), PASSIVE);
 })();
