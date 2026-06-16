@@ -1,19 +1,13 @@
 /* =========================================================
    main.js (REFactor - drop-in)
-   - Section unlock: ONE combined toast (+points)
-   - Game target hit: points toast per hit
-   - Arcade targets: real 2D elastic wall bounce (left/right/top/bottom)
-   - Arcade targets: bounce off protected UI blocks (no shatter/despawn)
-   - Mobile perf optimizations:
-       * fewer shards + shorter shard lifetime
-       * fewer targets + lower FPS on mobile
-       * less frequent protected-rect recalcs on mobile
-       * keep RAF alive even when Arcade is OFF
-   - CHANGE: Disable ARCADE MOTION on mobile (fastest/cleanest)
-     (Arcade toggle still affects music + UI label, but targets stay still on mobile.)
-   - CHANGE: Scoring zones
-       * Big subject targets: bullseye=250, body=125
-       * Floating targets: bullseye=100, body=50
+   PATCH (2026-06-16 + low-power hardening):
+   - Arcade defaults ON for first-time visitors (no LS key)
+   - Remove visualViewport.scroll listeners
+   - rAF-throttle resize/orientation handlers
+   - Low-power mode (Chrome portrait/narrow & reduced-motion):
+       * fewer targets, lower FPS
+       * fewer shards, shorter shard lifetime
+       * optional dataset hook: html[data-low-power="1"]
 ========================================================= */
 
 (() => {
@@ -34,15 +28,14 @@ const isTouchDevice = () =>
   (navigator.maxTouchPoints || 0) > 0 ||
   matchMedia("(pointer: coarse)").matches;
 
-// "No space on left/right for targets" (portrait monitors, narrow windows, etc.)
 function noSideSpaceNow() {
   const vv = window.visualViewport;
   const w = vv?.width ?? innerWidth;
   const h = vv?.height ?? innerHeight;
 
-  const TARGET = 54; // keep in sync with game cfg SIZE
-  const PAD = 10;    // keep in sync with game cfg PAD
-  const MIN_GUTTER_EACH_SIDE = 70; // required empty space on both sides
+  const TARGET = 54;
+  const PAD = 10;
+  const MIN_GUTTER_EACH_SIDE = 70;
 
   const portraitLike = h / Math.max(1, w) >= 1.25;
   const minNeededWidth = (PAD * 2) + TARGET + (MIN_GUTTER_EACH_SIDE * 2);
@@ -50,8 +43,23 @@ function noSideSpaceNow() {
   return portraitLike || w < minNeededWidth;
 }
 
-// Used everywhere (shards + targets): now includes portrait monitors too
 const isMobileNow = () => mqMobile.matches || isTouchDevice() || noSideSpaceNow();
+
+function isChrome() {
+  // Chrome, not Edge
+  return /Chrome\//.test(navigator.userAgent) && !/Edg\//.test(navigator.userAgent);
+}
+function lowPowerNow() {
+  const reduce = matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+  // Treat portrait/narrow as “low power” on Chrome (and also honor reduced motion everywhere)
+  return !!reduce || (noSideSpaceNow() && isChrome());
+}
+function applyLowPowerDataset() {
+  root.dataset.lowPower = lowPowerNow() ? "1" : "0";
+}
+applyLowPowerDataset();
+window.addEventListener("resize", applyLowPowerDataset, { passive: true });
+window.visualViewport?.addEventListener("resize", applyLowPowerDataset, { passive: true });
 
 const $ = (sel, rootEl = document) => rootEl.querySelector(sel);
 const $$ = (sel, rootEl = document) => Array.from(rootEl.querySelectorAll(sel));
@@ -59,11 +67,6 @@ const $$ = (sel, rootEl = document) => Array.from(rootEl.querySelectorAll(sel));
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
 function lsSet(key, val) { try { localStorage.setItem(key, val); } catch { } }
 
-function rectOf(el) {
-  const r = el.getBoundingClientRect();
-  return { l: r.left, t: r.top, r: r.right, b: r.bottom };
-}
-function expandRect(r, m) { return { l: r.l - m, t: r.t - m, r: r.r + m, b: r.b + m }; }
 function intersects(a, b) { return !(a.r <= b.l || a.l >= b.r || a.b <= b.t || a.t >= b.b); }
 
 const yearEl = $("#year");
@@ -108,13 +111,11 @@ const LS = Object.freeze({
   POINTS: "points_total_v1",
 });
 
-const savedArcade = lsGet(LS.ARCADE_ON);
-let arcadeMode = savedArcade == null ? true : savedArcade === "1"; // default ON for first-time visitors
+// default Arcade ON for first-time visitors (no key)
+let arcadeMode = (lsGet(LS.ARCADE_ON) ?? "1") === "1";
+let sfxOn = (lsGet(LS.SFX_ON) ?? "1") === "1";
+let musicOn = (lsGet(LS.MUSIC_ON) ?? "1") === "1";
 
-let sfxOn = (lsGet(LS.SFX_ON) ?? "1") === "1";         // default ON
-let musicOn = (lsGet(LS.MUSIC_ON) ?? "0") === "1";     // default OFF
-
-/* FX always HIGH */
 const fxHigh = true;
 
 root.dataset.arcade = arcadeMode ? "1" : "0";
@@ -155,12 +156,12 @@ function unlock(key, title, msg, { silent = false } = {}) {
   return true;
 }
 
-/* ---------- Points (persist across pages) ---------- */
+/* ---------- Points ---------- */
 let points = 0;
 const pointsEl = $("#pointsValue");
 function renderPoints() { if (pointsEl) pointsEl.textContent = String(points); }
 
-const QUOTES = [
+const QUOTES = [ /* (unchanged) */ 
   "Keep going — consistency beats intensity.",
   "You’re building momentum. Stay with it.",
   "Small wins compound. Great job.",
@@ -225,33 +226,25 @@ function checkPointMilestone() {
     lastMilestone = milestone;
     lsSet(LS.MILESTONE, String(lastMilestone));
     const quote = QUOTES[(Math.random() * QUOTES.length) | 0];
-
-    // ✅ MILESTONE now shows top-center (still every 1000)
     milestoneToast("MILESTONE", `${milestone} points — ${quote}`);
   }
 }
 
 function addPoints(n) {
   points = Math.max(0, points + n);
-  lsSet(LS.POINTS, String(points));   // ✅ persist across pages
+  lsSet(LS.POINTS, String(points));
   renderPoints();
   checkPointMilestone();
 }
 
-function awardPoints(amount, title = "POINTS", msg = "", { toastMs = 5000 } = {}) {
-  addPoints(amount);
-  toast(title, msg ? `${msg} — +${amount} points` : `+${amount} points`, { ms: toastMs });
-}
-
 function resetPoints() {
   points = 0;
-  lsSet(LS.POINTS, "0");            // ✅ persist reset
+  lsSet(LS.POINTS, "0");
   renderPoints();
   lastMilestone = 0;
   lsSet(LS.MILESTONE, "0");
 }
 
-// Load saved points (multi-page persistent)
 {
   const saved = parseInt(lsGet(LS.POINTS) || "0", 10);
   points = Number.isFinite(saved) ? saved : 0;
@@ -272,8 +265,6 @@ function updateXP() {
 }
 window.addEventListener("scroll", updateXP, { passive: true });
 updateXP();
-
-/* ... keep the rest of your file exactly as-is from here ... */
 
 /* ---------- Tilt / reticle ---------- */
 function shouldTilt() {
@@ -349,7 +340,7 @@ window.addEventListener("pointermove", (e) => {
   window.addEventListener("keydown", dismiss, { once: true });
 })();
 
-/* ---------- SFX (bleeps) ---------- */
+/* ---------- SFX ---------- */
 let audioCtx = null;
 function ensureAudio() {
   if (audioCtx) return audioCtx;
@@ -440,7 +431,7 @@ document.addEventListener("visibilitychange", () => {
   });
 })();
 
-/* ---------- Settings toggles (NO FX toggle) ---------- */
+/* ---------- Settings toggles ---------- */
 (() => {
   const arcadeBtn = $("#arcadeToggle");
   const sfxBtn = $("#sfxToggle");
@@ -516,7 +507,13 @@ function ensureShardLayer() {
 }
 
 function shatterAt(x, y, count = 18) {
+  // ✅ low power hard cap
+  const low = lowPowerNow();
+  const mobile = isMobileNow();
+  if (low) count = Math.min(count, 6);
+
   const layer = ensureShardLayer();
+  const removeAfter = low ? 420 : (mobile ? 650 : 1000);
 
   const pickColor = () => {
     const r = Math.random();
@@ -534,9 +531,6 @@ function shatterAt(x, y, count = 18) {
     if (r < 0.97) return "rgba(0,229,255,.55)";
     return "rgba(255,43,214,.40)";
   };
-
-  const mobile = isMobileNow();
-  const removeAfter = mobile ? 650 : 1000;
 
   for (let i = 0; i < count; i++) {
     const s = document.createElement("i");
@@ -557,17 +551,17 @@ function shatterAt(x, y, count = 18) {
     s.style.boxShadow = isBright ? "0 0 10px rgba(255,255,255,.22)" : "0 0 8px rgba(0,0,0,.16)";
 
     const ang = Math.random() * Math.PI * 2;
-    const dist = 26 + Math.random() * 90;
+    const dist = (low ? 18 : 26) + Math.random() * (low ? 55 : 90);
     const dx = Math.cos(ang) * dist;
     const dy = Math.sin(ang) * dist;
     const rot = (Math.random() * 720 - 360) + "deg";
 
     s.animate(
       [
-        { transform: "translate(-50%, -50%) scale(1)", opacity: 1, filter: mobile ? "none" : "blur(0px)" },
-        { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) rotate(${rot}) scale(.75)`, opacity: 0, filter: mobile ? "none" : "blur(.2px)" },
+        { transform: "translate(-50%, -50%) scale(1)", opacity: 1, filter: (mobile || low) ? "none" : "blur(0px)" },
+        { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) rotate(${rot}) scale(.75)`, opacity: 0, filter: (mobile || low) ? "none" : "blur(.2px)" },
       ],
-      { duration: 520 + Math.random() * 320, easing: "cubic-bezier(.2,.9,.2,1)", fill: "forwards" }
+      { duration: low ? 340 : (520 + Math.random() * 320), easing: "cubic-bezier(.2,.9,.2,1)", fill: "forwards" }
     );
 
     layer.appendChild(s);
@@ -596,7 +590,7 @@ function pointsPopupAt(x, y, text, { ms = 1100, opacity = 0.92 } = {}) {
       { transform: "translate(-50%, -50%) translateY(0px) scale(1)", opacity },
       { transform: "translate(-50%, -50%) translateY(-18px) scale(1.03)", opacity: 0 },
     ],
-    { duration: ms, easing: "cubic-bezier(.2,.9,.2,1)", fill: "forwards" }
+    { duration: lowPowerNow() ? Math.min(ms, 700) : ms, easing: "cubic-bezier(.2,.9,.2,1)", fill: "forwards" }
   );
 
   setTimeout(() => el.remove(), ms + 80);
@@ -612,7 +606,7 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
   a.addEventListener("click", () => unlock("resume_open", "Paper Trail", "Opened the resume."), { passive: true });
 });
 
-/* ---------- Tiles: unlock logic (scoring: bullseye=250, body=125) ---------- */
+/* ---------- Tiles unlock logic (UNCHANGED from your paste) ---------- */
 (() => {
   const tiles = $$(".tile");
 
@@ -687,7 +681,6 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
   window.addEventListener("load", () => { measureAll(); requestAnimationFrame(measureAll); }, { passive: true });
   window.addEventListener("resize", measureAll, { passive: true });
 
-  // Click scoring for big targets (main + preview)
   document.addEventListener("click", (e) => {
     const t = e.target instanceof Element ? e.target : null;
     if (!t) return;
@@ -715,7 +708,6 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
     const anchor = btn.querySelector(".bullseye") || btn;
     const p = centerOfEl(anchor);
 
-    // Preview target: expand/collapse
     if (btn.dataset.action === "resumeExpand") {
       addPoints(amt);
       pointsPopupAt(p.x, p.y, `+${amt}`, { opacity: 0.92, ms: 1100 });
@@ -724,7 +716,6 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
       return toggleResumePreview(btn);
     }
 
-    // Main target: unlock
     if (btn.classList.contains("main-target")) {
       const tile = btn.closest(".tile");
       if (!tile || tile.classList.contains("unlocked")) return;
@@ -738,8 +729,6 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
     }
   }, { passive: true });
 
-  // Shoot-anywhere feature (kept): still requires hitting a .target element.
-  // NOTE: This awards no points; points come from actual clicks on the target button.
   function shootAt(x, y) {
     bleep(180, 0.035, "square", 1.0);
     bleep(90, 0.02, "sine", 0.7);
@@ -779,7 +768,7 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
   });
 })();
 
-/* ---------- Hamburger nav (shootable page targets) ---------- */
+/* ---------- Hamburger nav (UNCHANGED) ---------- */
 (() => {
   const navMenu = $("#navMenu");
   const panel = $("#navMenu .nav-panel");
@@ -814,9 +803,8 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
     const dy = clientY - cy;
     const d2 = dx * dx + dy * dy;
 
-    // Scale radii based on the bullseye element size
-    const innerR = r.width * 0.35; // bullseye
-    const outerR = r.width * 0.62; // body ring area around it
+    const innerR = r.width * 0.35;
+    const outerR = r.width * 0.62;
 
     if (d2 <= innerR * innerR) return "bull";
     if (d2 <= outerR * outerR) return "body";
@@ -839,7 +827,7 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
     shatterAt(x, y, isMobileNow() ? 5 : 14);
     playBreakAudio();
 
-    return zone; // "bull" | "body"
+    return zone;
   }
 
   function navigate(btn) {
@@ -879,33 +867,43 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
   });
 })();
 
-/* ---------- Game Targets (Arena under content; medium density scales with #gameLayer size) ---------- */
+/* ---------- Game Targets (low-power + Chrome portrait hardening) ---------- */
 (() => {
   const layer = $("#gameLayer");
   if (!layer) return;
 
-  // Arena is always ON (you can change this later if you want)
+  const PASSIVE = { passive: true };
+  const CAPTURE_ACTIVE = { capture: true, passive: false };
+
   const isOffLayout = () => false;
 
   let initialized = false;
   let offActive = false;
 
-  // ✅ stable listener options (avoid duplicate listener edge cases)
-  const PASSIVE = { passive: true };
-  const CAPTURE_ACTIVE = { capture: true, passive: false };
+  function rafThrottle(fn) {
+    let scheduled = false;
+    return () => {
+      if (scheduled) return;
+      scheduled = true;
+      requestAnimationFrame(() => {
+        scheduled = false;
+        fn();
+      });
+    };
+  }
 
-  // ✅ perf/game cfg
-  const getCfg = () => ({
-    FPS: 60,
-    SIZE: 54,
-    PAD: 10,
-    POINTS_PER_HIT: 100, // bullseye points; body is half
-  });
+  const getCfg = () => {
+    const low = lowPowerNow() || noSideSpaceNow();
+    return ({
+      FPS: low ? 35 : 60,
+      SIZE: 54,
+      PAD: 10,
+      POINTS_PER_HIT: 100,
+      MAX_TARGETS: low ? 6 : 12,
+    });
+  };
 
-  const arcadeMotionEnabled = () => arcadeMode; // when ON, arcadeMode controls motion
-
-  let cachedBlocks = [];
-  let blocksDirty = true;
+  const arcadeMotionEnabled = () => arcadeMode;
 
   let ents = [];
   let raf = null;
@@ -920,7 +918,6 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
   const randInt = (a, b) => Math.floor(a + Math.random() * (b - a + 1));
   const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
 
-  // Layer-relative bounds (arena coordinates)
   function worldBounds(cfg) {
     return {
       l: cfg.PAD,
@@ -932,57 +929,48 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
 
   const candidateRect = (cfg, x, y) => ({ l: x, t: y, r: x + cfg.SIZE, b: y + cfg.SIZE });
 
-  // Arena is separate, so no protected UI blocks are needed
-  function computeProtectedRects() { return []; }
-
   function calcTargetGoal(cfg) {
     const w = layer.clientWidth || 0;
     const h = layer.clientHeight || 0;
     const area = Math.max(1, w * h);
 
-    // LESS frequent: bigger spacing => fewer targets
     const spacing = cfg.SIZE * 2.8;
     const cellArea = spacing * spacing;
 
     const ideal = Math.round(area / cellArea);
-
-    // lower caps
-    const min = 3;
-    const max = 12;
-
-    return clamp(ideal, min, max);
+    return clamp(ideal, 3, cfg.MAX_TARGETS);
   }
 
   function overlapsLiveTargets(cfg, rr) {
     for (const e of ents) {
       if (!e.alive) continue;
-      if (intersects(rr, candidateRect(cfg, e.x, e.y))) return true;
+      const er = candidateRect(cfg, e.x, e.y);
+      if (intersects(rr, er)) return true;
     }
     return false;
   }
 
-  function isValidSpawn(cfg, bounds, blocks, x, y) {
+  function isValidSpawn(cfg, bounds, x, y) {
     const rr = candidateRect(cfg, x, y);
     if (rr.l < bounds.l || rr.t < bounds.t || rr.r > bounds.r || rr.b > bounds.b) return false;
-    if (blocks.some((b) => intersects(rr, b))) return false;
     if (overlapsLiveTargets(cfg, rr)) return false;
     return true;
   }
 
-  function pickSpawnPoint(cfg, bounds, blocks) {
+  function pickSpawnPoint(cfg, bounds) {
     const maxX = Math.max(bounds.l, bounds.r - cfg.SIZE);
     const maxY = Math.max(bounds.t, bounds.b - cfg.SIZE);
 
-    for (let tries = 0; tries < 1400; tries++) {
+    for (let tries = 0; tries < 900; tries++) {
       const x = randInt(bounds.l, maxX);
       const y = randInt(bounds.t, maxY);
-      if (isValidSpawn(cfg, bounds, blocks, x, y)) return { x, y };
+      if (isValidSpawn(cfg, bounds, x, y)) return { x, y };
     }
     return null;
   }
 
   function setPos(ent) {
-    ent.el.style.transform = `translate(${ent.x}px, ${ent.y}px)`;
+    ent.el.style.transform = `translate3d(${ent.x}px, ${ent.y}px, 0)`;
   }
 
   function giveVelocity(ent) {
@@ -991,50 +979,6 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
     const ang = Math.random() * Math.PI * 2;
     ent.vx = Math.cos(ang) * speed;
     ent.vy = Math.sin(ang) * speed;
-  }
-
-  function reflectVelocity(ent, nx, ny) {
-    const vdot = ent.vx * nx + ent.vy * ny;
-    ent.vx = ent.vx - 2 * vdot * nx;
-    ent.vy = ent.vy - 2 * vdot * ny;
-  }
-
-  function rectOverlapDepth(a, b) {
-    const left = a.r - b.l;
-    const right = b.r - a.l;
-    const top = a.b - b.t;
-    const bottom = b.b - a.t;
-    return { left, right, top, bottom };
-  }
-
-  function resolveAgainstBlocks(ent, blocks, bounds, cfg) {
-    if (!blocks.length) return;
-
-    for (let iter = 0; iter < 5; iter++) {
-      const rr = candidateRect(cfg, ent.x, ent.y);
-      const hit = blocks.find((b) => intersects(rr, b));
-      if (!hit) return;
-
-      const d = rectOverlapDepth(rr, hit);
-
-      let dx = -d.left, dy = 0, min = d.left;
-      if (d.right < min) { min = d.right; dx = d.right; dy = 0; }
-      if (d.top < min) { min = d.top; dx = 0; dy = -d.top; }
-      if (d.bottom < min) { min = d.bottom; dx = 0; dy = d.bottom; }
-
-      const eps = 0.75;
-      if (dx !== 0) ent.x += dx + Math.sign(dx) * eps;
-      if (dy !== 0) ent.y += dy + Math.sign(dy) * eps;
-
-      let nx = 0, ny = 0;
-      if (dx !== 0) nx = Math.sign(dx);
-      else ny = Math.sign(dy);
-
-      reflectVelocity(ent, nx, ny);
-
-      ent.x = clamp(ent.x, bounds.l, bounds.r - ent.w);
-      ent.y = clamp(ent.y, bounds.t, bounds.b - ent.h);
-    }
   }
 
   const aliveCount = () => ents.reduce((n, e) => n + (e.alive ? 1 : 0), 0);
@@ -1060,14 +1004,12 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
     layer.innerHTML = "";
   }
 
-  // Geometric bullseye hit-test for floating targets
   function isBullseyeHitPoint(btn, clientX, clientY) {
     const r = btn.getBoundingClientRect();
     const cx = r.left + r.width / 2;
     const cy = r.top + r.height / 2;
     const dx = clientX - cx;
     const dy = clientY - cy;
-
     const bullR = 13;
     return (dx * dx + dy * dy) <= (bullR * bullR);
   }
@@ -1078,7 +1020,6 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
 
     const cfg = getCfg();
     const amt = bullseye ? cfg.POINTS_PER_HIT : Math.floor(cfg.POINTS_PER_HIT / 2);
-
     addPoints(amt);
 
     const r = ent.el.getBoundingClientRect();
@@ -1097,12 +1038,10 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
     }, 260);
   }
 
-  function enforceNoCollisions() {
+  function enforce() {
     if (offActive) return;
-
     const cfg = getCfg();
     const bounds = worldBounds(cfg);
-    const blocks = computeProtectedRects();
 
     for (const e of ents) {
       if (!e.alive) continue;
@@ -1112,8 +1051,6 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
         e.vy = 0;
         e.x = clamp(e.x, bounds.l, bounds.r - e.w);
         e.y = clamp(e.y, bounds.t, bounds.b - e.h);
-      } else {
-        resolveAgainstBlocks(e, blocks, bounds, cfg);
       }
       setPos(e);
     }
@@ -1124,10 +1061,9 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
 
     const cfg = getCfg();
     const bounds = worldBounds(cfg);
-    const blocks = computeProtectedRects();
 
     while (aliveCount() < targetGoal) {
-      const p = pickSpawnPoint(cfg, bounds, blocks);
+      const p = pickSpawnPoint(cfg, bounds);
       if (!p) break;
 
       const el = document.createElement("button");
@@ -1149,7 +1085,7 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
     if (respawnRAF) return;
     respawnRAF = requestAnimationFrame(() => {
       respawnRAF = null;
-      enforceNoCollisions();
+      enforce();
       fillToGoal();
     });
   }
@@ -1162,7 +1098,7 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
     targetGoal = calcTargetGoal(cfg);
 
     fillToGoal();
-    enforceNoCollisions();
+    enforce();
     fillToGoal();
 
     start();
@@ -1192,13 +1128,6 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
 
     const bounds = worldBounds(cfg);
 
-    const refreshEvery = 3;
-    if (frameCount % refreshEvery === 0 || blocksDirty) {
-      cachedBlocks = computeProtectedRects();
-      blocksDirty = false;
-    }
-    const blocks = cachedBlocks;
-
     for (const e of ents) {
       if (!e.alive) continue;
 
@@ -1211,15 +1140,12 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
       if (e.y <= bounds.t) { e.y = bounds.t; if (e.vy < 0) e.vy = -e.vy; }
       else if (e.y + e.h >= bounds.b) { e.y = bounds.b - e.h; if (e.vy > 0) e.vy = -e.vy; }
 
-      if (blocks.length) resolveAgainstBlocks(e, blocks, bounds, cfg);
-
       setPos(e);
     }
 
     raf = requestAnimationFrame(tick);
   }
 
-  // Pointer handler
   document.addEventListener("pointerdown", (e) => {
     if (offActive) return;
 
@@ -1248,57 +1174,32 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
     enforceRAF = requestAnimationFrame(() => {
       enforceRAF = null;
       if (offActive) return;
-      blocksDirty = true;
-      enforceNoCollisions();
+      enforce();
       scheduleRespawn();
     });
-  }
-
-  // ✅ rAF throttle helper (run at most once per frame)
-  function rafThrottle(fn) {
-    let scheduled = false;
-    return () => {
-      if (scheduled) return;
-      scheduled = true;
-      requestAnimationFrame(() => {
-        scheduled = false;
-        fn();
-      });
-    };
   }
 
   function _onLayoutChange() {
     if (offActive) return;
     if (!arcadeMode) return;
-
-    // keep target count proportional as the arena changes size
     targetGoal = calcTargetGoal(getCfg());
     scheduleRespawn();
-
-    blocksDirty = true;
     scheduleEnforce();
   }
 
-  // ✅ throttled version
   const onLayoutChange = rafThrottle(_onLayoutChange);
 
-  const vv = window.visualViewport;
-
-  function onOrient() {
-    // orientation can “settle” late; keep the delay but throttle the work
-    setTimeout(onLayoutChange, 250);
-  }
+  function onOrient() { setTimeout(onLayoutChange, 250); }
 
   function addLayoutListeners() {
-    // ✅ No scroll listeners (these are the big portrait/vertical jank source)
     window.addEventListener("resize", onLayoutChange, PASSIVE);
-    vv?.addEventListener("resize", onLayoutChange, PASSIVE);
+    window.visualViewport?.addEventListener("resize", onLayoutChange, PASSIVE);
     window.addEventListener("orientationchange", onOrient, PASSIVE);
   }
 
   function removeLayoutListeners() {
     window.removeEventListener("resize", onLayoutChange, PASSIVE);
-    vv?.removeEventListener("resize", onLayoutChange, PASSIVE);
+    window.visualViewport?.removeEventListener("resize", onLayoutChange, PASSIVE);
     window.removeEventListener("orientationchange", onOrient, PASSIVE);
   }
 
@@ -1323,7 +1224,6 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
   function _reconcileOffLayout() {
     const shouldOff = isOffLayout();
 
-    // If state didn't change, still need a first-time init
     if (shouldOff === offActive) {
       layer.style.display = shouldOff ? "none" : "";
       layer.toggleAttribute("aria-hidden", shouldOff);
@@ -1353,16 +1253,12 @@ $$('a[href$=".pdf"], a[href*="Donald_Hui_Resume"]').forEach((a) => {
     }
   }
 
-  // ✅ throttled version (prevents rapid re-entry on resize storms)
   const reconcileOffLayout = rafThrottle(_reconcileOffLayout);
 
-  // init
   reconcileOffLayout();
 
-  // watch for changes
   mqMobile.addEventListener?.("change", reconcileOffLayout);
   window.addEventListener("resize", reconcileOffLayout, PASSIVE);
   window.visualViewport?.addEventListener("resize", reconcileOffLayout, PASSIVE);
-  // ✅ remove vv scroll reconcile (major portrait jank source)
   window.addEventListener("orientationchange", () => setTimeout(reconcileOffLayout, 250), PASSIVE);
 })();
