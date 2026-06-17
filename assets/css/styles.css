@@ -1441,3 +1441,6 @@ html[data-low-power="1"] .vignette {
 html[data-low-power="1"] .shard {
   box-shadow: none !important;
 }
+
+.reticle { will-change: transform, left, top; transform: translate(-50%, -50%) translateZ(0); }
+.hero-main { will-change: transform; }
