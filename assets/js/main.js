@@ -312,35 +312,61 @@ function updateXP() {
 window.addEventListener("scroll", updateXP, { passive: true });
 updateXP();
 
-/* ---------- Tilt / reticle ---------- */
+/* ---------- Tilt / reticle (rAF throttled to prevent Chrome portrait jank) ---------- */
 function shouldTilt() {
   if (!fxHigh) return false;
   if (matchMedia?.("(prefers-reduced-motion: reduce)").matches) return false;
   if (window.innerWidth < 860) return false;
+  // if we’re in low power (Chrome portrait / narrow), disable tilt entirely
+  if (lowPowerNow()) return false;
   return true;
 }
 
-window.addEventListener("pointermove", (e) => {
-  const xPct = (e.clientX / window.innerWidth) * 100;
-  const yPct = (e.clientY / window.innerHeight) * 100;
-  root.style.setProperty("--mx", xPct.toFixed(2) + "%");
-  root.style.setProperty("--my", yPct.toFixed(2) + "%");
+(() => {
+  let pending = false;
+  let lastX = 0;
+  let lastY = 0;
 
-  if (reticle) {
-    reticle.style.left = e.clientX + "px";
-    reticle.style.top = e.clientY + "px";
+  function apply() {
+    pending = false;
+
+    const w = window.innerWidth || 1;
+    const h = window.innerHeight || 1;
+
+    // Always update CSS vars (cheap)
+    const xPct = (lastX / w) * 100;
+    const yPct = (lastY / h) * 100;
+    root.style.setProperty("--mx", xPct.toFixed(2) + "%");
+    root.style.setProperty("--my", yPct.toFixed(2) + "%");
+
+    // Reticle update can be expensive in Chrome on some setups; disable in low power
+    if (!lowPowerNow() && reticle) {
+      reticle.style.left = lastX + "px";
+      reticle.style.top = lastY + "px";
+    }
+
+    // Tilt is the most expensive part; already gated
+    if (!heroCard || !shouldTilt()) return;
+
+    const rect = heroCard.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = (lastX - cx) / rect.width;
+    const dy = (lastY - cy) / rect.height;
+
+    root.style.setProperty("--tiltY", (dx * 6).toFixed(2) + "deg");
+    root.style.setProperty("--tiltX", (-dy * 6).toFixed(2) + "deg");
   }
 
-  if (!heroCard || !shouldTilt()) return;
-  const rect = heroCard.getBoundingClientRect();
-  const cx = rect.left + rect.width / 2;
-  const cy = rect.top + rect.height / 2;
-  const dx = (e.clientX - cx) / rect.width;
-  const dy = (e.clientY - cy) / rect.height;
+  window.addEventListener("pointermove", (e) => {
+    lastX = e.clientX;
+    lastY = e.clientY;
 
-  root.style.setProperty("--tiltY", (dx * 6).toFixed(2) + "deg");
-  root.style.setProperty("--tiltX", (-dy * 6).toFixed(2) + "deg");
-}, { passive: true });
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(apply);
+  }, { passive: true });
+})();
 
 /* ---------- Noise background ---------- */
 (() => {
