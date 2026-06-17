@@ -122,8 +122,6 @@ body::before {
   opacity: 0.38;
 }
 
-/* ...rest of the CSS remains identical... */
-
 /* =========================
    Navigation
 ========================= */
@@ -1419,22 +1417,39 @@ footer {
 }
 
 /* Low-power mode (set by JS): fewer expensive visuals */
+html[data-low-power="1"] .reticle {
+  display: none !important; /* ✅ biggest win when mouse is over portrait monitor */
+}
+
+html[data-low-power="1"] .hero-main {
+  transform: none !important; /* ✅ avoid perspective tilt cost */
+}
+
 html[data-low-power="1"] .reticle::before,
 html[data-low-power="1"] .reticle::after {
   animation: none !important;
 }
 
+/* Remove costly filters/blend modes in low power */
 html[data-low-power="1"] .aurora {
-  filter: blur(18px) saturate(140%);
-  opacity: 0.75;
+  filter: none !important;
+  opacity: 0.55;
 }
 
 html[data-low-power="1"] .noise {
-  opacity: 0.14;
+  mix-blend-mode: normal !important;
+  filter: none !important;
+  opacity: 0.10;
 }
 
 html[data-low-power="1"] .vignette {
-  opacity: 0.28;
+  mix-blend-mode: normal !important;
+  opacity: 0.22;
+}
+
+/* Moving targets: heavy shadow is expensive to composite in Chrome */
+html[data-low-power="1"] .game-target {
+  box-shadow: none !important;
 }
 
 /* Optional: reduce shard rendering cost further */
